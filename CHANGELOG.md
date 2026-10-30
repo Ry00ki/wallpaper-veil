@@ -2,6 +2,14 @@
 
 Changes are grouped by release. This project has not published a stable release.
 
+## 0.1.4 preview - 30.10.26
+
+- Accept a verified universal source-engine build with an explicit archive/manifest receipt and native-source checks. Preserve the official prebuilt input as a separately verified option.
+- Keep the native engine build in its own manual workflow and preserve product preview packaging.
+- Bind package provenance to signed application metadata and executable hashes.
+- Show version, build and release channel in About, with a manual Check for Updates action that links to a newer GitHub release.
+- Keep preview and stable update channels distinct; report unavailable checks without changing the installed app.
+
 ## 0.1.3 preview - 30.10.26
 
 - Confirm brightness requests by hardware read-back, retry transient writes within a fixed bound, and follow newer source targets without waiting for an obsolete request.
@@ -11,7 +19,7 @@ Changes are grouped by release. This project has not published a stable release.
 - Bound Notification Center preservation even when snapshots fail; abort safely when an event tap cannot start.
 - Run portable brightness, restoration, widget failure and lifecycle regression suites in source checks.
 
-Actual login-session startup, Accessibility-granted UI automation and sleep/Spaces/display connection qualification remain tracked separately.
+Verified launch at login after a real reboot on macOS 27.0.1, with one Wallpaper Veil runtime and no separate Hammerspoon process. Focused brightness checks passed on two Studio Displays. Accessibility-granted UI automation and sleep/Spaces/display connection qualification remain tracked separately.
 
 ## 0.1.2 preview - 30.10.26
 
