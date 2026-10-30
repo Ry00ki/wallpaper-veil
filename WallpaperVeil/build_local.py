@@ -15,6 +15,7 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
@@ -61,6 +62,30 @@ def checked_source(project: Path) -> dict:
     return {"upstream_tag": "1.1.1", "upstream_commit": tag, "local_head": actual,
             "local_branch": run("/usr/bin/git", "-C", str(project), "branch", "--show-current", capture=True),
             "worktree_status": run("/usr/bin/git", "-C", str(project), "status", "--porcelain", capture=True).splitlines()}
+
+
+def release_metadata(own: Path) -> dict:
+    """Read the single release edit point and reject inconsistent metadata."""
+    value = json.loads((own / "version.json").read_text())
+    keys = {"version", "build", "release_tag", "release_channel"}
+    if not isinstance(value, dict) or set(value) != keys or not all(isinstance(v, str) for v in value.values()):
+        raise RuntimeError("version.json must contain exactly four string release fields")
+    integer = r"(?:0|[1-9][0-9]*)"
+    if not re.fullmatch(integer + r"\." + integer + r"\." + integer, value["version"]):
+        raise RuntimeError("Release version must contain three canonical numeric components")
+    if not re.fullmatch(r"[1-9][0-9]*", value["build"]):
+        raise RuntimeError("Release build must be a positive canonical integer string")
+    tag = "v" + value["version"]
+    channel = value["release_channel"]
+    if channel == "stable":
+        valid_tag = value["release_tag"] == tag
+    elif channel == "preview":
+        valid_tag = bool(re.fullmatch(re.escape(tag) + r"-preview\.[1-9][0-9]*", value["release_tag"]))
+    else:
+        raise RuntimeError("Release channel must be stable or preview")
+    if not valid_tag:
+        raise RuntimeError("Release tag must match its version and channel")
+    return value
 
 
 def bundled_setup(original: str) -> str:
@@ -182,6 +207,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
         raise RuntimeError("--output must name a .app bundle")
     if runtime == output or output.is_relative_to(runtime):
         raise RuntimeError("Build output must not replace or sit inside the source runtime")
+    release = release_metadata(own)
     source = checked_source(project)
     original_info = plistlib.loads((runtime / "Contents/Info.plist").read_bytes())
     runtime_receipt = verify_runtime(project, runtime, source_manifest, source_archive)
@@ -263,7 +289,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
                     "NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationAlwaysUsageDescription"]:
             info.pop(key, None)
         info.update({"CFBundleIdentifier": APP_ID, "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.4", "CFBundleVersion": "5",
+                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": release["version"], "CFBundleVersion": release["build"],
                      "CFBundleIconFile": "WallpaperVeil.icns",
                      "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
                      "NSAppleScriptEnabled": False, "SUEnableAutomaticChecks": False,
@@ -272,7 +298,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
                      "WVPrototypeType": prototype_type,
                      "WVRuntimeOrigin": runtime_receipt["origin"],
                      "WVRuntimeVersion": RUNTIME_VERSION, "WVRuntimeBuild": RUNTIME_BUILD,
-                     "WVReleaseTag": "v0.1.4-preview.1", "WVReleaseChannel": "preview",
+                     "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"],
                      "WVUpstreamSourceCommit": SOURCE_COMMIT,
                      "NSHumanReadableCopyright": "Wallpaper Veil. Includes Hammerspoon and third-party software; see bundled acknowledgements."})
         with (runtime_contents / "Info.plist").open("wb") as stream:
@@ -281,13 +307,13 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
             "CFBundleDevelopmentRegion": "en", "CFBundleInfoDictionaryVersion": "6.0",
             "CFBundlePackageType": "APPL", "CFBundleIdentifier": LAUNCHER_ID,
             "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.4", "CFBundleVersion": "5",
+            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": release["version"], "CFBundleVersion": release["build"],
             "LSUIElement": True, "LSMinimumSystemVersion": original_info.get("LSMinimumSystemVersion", "13.0"),
             "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
             "NSHumanReadableCopyright": info["NSHumanReadableCopyright"],
             "WVPrototypeType": info["WVPrototypeType"], "WVRuntimeBundleIdentifier": APP_ID,
             "WVRuntimeRelativePath": HELPER_RELATIVE_PATH,
-            "WVReleaseTag": "v0.1.4-preview.1", "WVReleaseChannel": "preview",
+            "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"],
         }
         icon = own / "assets/WallpaperVeil.icns"
         if not icon.is_file():
@@ -306,8 +332,8 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
             "-I", str(project / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement",
             str(own / "native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
         provenance = {
-            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.4", "build": "5",
-            "release_tag": "v0.1.4-preview.1", "release_channel": "preview",
+            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": release["version"], "build": release["build"],
+            "release_tag": release["release_tag"], "release_channel": release["release_channel"],
             "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
             "type": prototype_type,
             "runtime_relative_path": HELPER_RELATIVE_PATH,
@@ -319,6 +345,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
             "source_hashes": {"launcher.m": sha256(own / "launcher.m"), "build_local.py": sha256(Path(__file__)),
                               "native_ui.m": sha256(own / "native_ui.m"), "WallpaperVeil.icns": sha256(icon),
                               "runtime_provenance.py": sha256(own / "runtime_provenance.py"),
+                              "version.json": sha256(own / "version.json"),
                               **({"update_check.h": sha256(own / "update_check.h")}
                                  if (own / "update_check.h").is_file() else {})},
             "component_notices": component_notices,

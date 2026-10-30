@@ -2,6 +2,7 @@
 import hashlib
 import importlib.util
 import json
+import plistlib
 from pathlib import Path
 import tempfile
 import unittest
@@ -23,8 +24,14 @@ class PackageReceiptTests(unittest.TestCase):
         (self.app / "Contents/MacOS/WallpaperVeil").write_bytes(b"fixture launcher")
         (self.helper / "Contents/MacOS/WallpaperVeilRuntime").write_bytes(b"fixture source engine")
         self.embedded = {"bundle_id": "com.ry00ki.wallpaperveil.launcher", "engine_recompiled_from_source": True,
+                         "version": "0.1.4", "build": "5", "release_tag": "v0.1.4-preview.1",
+                         "release_channel": "preview",
                          "runtime": {"origin": "source-build", "engine_recompiled_from_source": True,
                                      "source_manifest": {"schema": 1}}}
+        for bundle in (self.app, self.helper):
+            (bundle / "Contents/Info.plist").write_bytes(plistlib.dumps({
+                "CFBundleShortVersionString": "0.1.4", "CFBundleVersion": "5",
+                "WVReleaseTag": "v0.1.4-preview.1", "WVReleaseChannel": "preview"}))
         self.report = {"signed_launcher_sha256": hashlib.sha256(b"fixture launcher").hexdigest(),
                        "signed_engine_sha256": hashlib.sha256(b"fixture source engine").hexdigest()}
 
@@ -75,6 +82,26 @@ class PackageReceiptTests(unittest.TestCase):
         self.embedded["runtime"].pop("source_manifest")
         self.write()
         with self.assertRaisesRegex(RuntimeError, "engine manifest"):
+            package.read_build_report(self.app)
+
+    def test_outer_and_helper_release_fields_must_match_provenance(self):
+        self.write()
+        for bundle in (self.app, self.helper):
+            path = bundle / "Contents/Info.plist"
+            original = path.read_bytes()
+            for key in ("CFBundleShortVersionString", "CFBundleVersion", "WVReleaseTag", "WVReleaseChannel"):
+                with self.subTest(bundle=bundle.name, field=key):
+                    info = plistlib.loads(original)
+                    info[key] = "mismatched release"
+                    path.write_bytes(plistlib.dumps(info))
+                    with self.assertRaisesRegex(RuntimeError, "release metadata"):
+                        package.read_build_report(self.app)
+                    path.write_bytes(original)
+
+    def test_release_metadata_cannot_be_missing_from_signed_provenance(self):
+        self.embedded.pop("release_tag")
+        self.write()
+        with self.assertRaisesRegex(RuntimeError, "release metadata"):
             package.read_build_report(self.app)
 
 

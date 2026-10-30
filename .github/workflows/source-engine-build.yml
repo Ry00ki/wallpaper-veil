@@ -23,6 +23,8 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Verify runtime provenance and native release rules
+        run: python3 -m unittest discover -s WallpaperVeil/tests -p 'test_*.py' -v
       - name: Compile and verify the pinned universal source engine
         timeout-minutes: 18
         run: |

@@ -80,7 +80,10 @@ of the official binary pin. Without source flags, an engine must match the
 pinned official executable/bootstrap hashes; an ad hoc source build cannot be
 silently described as the official runtime.
 
-Candidate 0.1.4/build 5 is unreleased. Static input/signature and packaging checks
+Edit `WallpaperVeil/version.json` once to set the product version, positive build
+number, release tag and channel. The builder validates their consistency and
+uses them for both bundles and signed provenance; packaging rejects mismatches.
+Source-engine candidates remain unreleased until qualification. Static input/signature and packaging checks
 do not qualify application startup, menu behavior, real brightness, login,
 permissions or display lifecycle. Repeat local application acceptance and UI
 checks before installation or release. Do not upload a developer's local build

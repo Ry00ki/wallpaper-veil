@@ -40,6 +40,14 @@ def read_build_report(app: Path) -> dict:
     for key, path in binaries.items():
         if report.get(key) != hashlib.sha256(path.read_bytes()).hexdigest():
             raise RuntimeError('Builder report does not match the signed application executables')
+    release_fields = {'CFBundleShortVersionString': 'version', 'CFBundleVersion': 'build',
+                      'WVReleaseTag': 'release_tag', 'WVReleaseChannel': 'release_channel'}
+    if any(not isinstance(report.get(key), str) or not report[key] for key in release_fields.values()):
+        raise RuntimeError('Signed provenance is missing release metadata')
+    for bundle in (app, app / 'Contents/Helpers/Wallpaper Veil Runtime.app'):
+        info = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
+        if any(info.get(field) != report[key] for field, key in release_fields.items()):
+            raise RuntimeError('Application release metadata disagrees with signed provenance')
     runtime = report.get('runtime', {})
     origin = runtime.get('origin')
     source_built = report.get('engine_recompiled_from_source')
@@ -84,6 +92,8 @@ def package(app: Path, destination: Path) -> Path:
     (destination / receipt_name).write_text(json.dumps(receipt, indent=2) + '\n')
     summary = {
         'project': 'Wallpaper Veil', 'archive': archive.name, 'sha256': digest,
+        'version': report['version'], 'build': report['build'],
+        'release_tag': report['release_tag'], 'release_channel': report['release_channel'],
         'extracted_signatures_verified': True, 'app_launched': False,
         'runtime_origin': runtime['origin'],
         'engine_recompiled_from_source': report['engine_recompiled_from_source'],
