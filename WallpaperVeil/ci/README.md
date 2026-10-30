@@ -48,7 +48,9 @@ The existing preview packaging workflow remains unchanged.
 
 The successful baseline recipe was qualified in
 [run 41007648485](https://github.com/Ry00ki/wallpaper-veil/actions/runs/41007648485).
-The shared-script refactor still needs its own manual CI run before qualification.
+The permanent shared-script workflow passed in
+[run 41018053866](https://github.com/Ry00ki/wallpaper-veil/actions/runs/41018053866)
+at recipe revision `69ff1cce2a7fd61b1cf5033131cfc5b0bba53945`.
 This recipe intentionally pins native source to commit
 `1469832361b4c3687ec7d589c1b4efe4d3b742ee`; it does not compile subsequent native
 source edits. Changes to native source require a new audited recipe and engine.
@@ -88,3 +90,28 @@ do not qualify application startup, menu behavior, real brightness, login,
 permissions or display lifecycle. Repeat local application acceptance and UI
 checks before installation or release. Do not upload a developer's local build
 log; the permanent workflow's retained log comes from its public CI runner.
+
+## Version and installed release checks
+
+`WallpaperVeil/version.json` is the single edit point for version, incremented build,
+release tag and channel. The builder rejects inconsistencies and writes both app
+bundles and provenance from it. Packaging checks those signed fields again.
+
+Run all `test_*.py` and `test_*.lua` suites for a release, plus the changed feature's
+real installed checks. Quit the running app before an explicit UI qualification:
+
+```sh
+open -n "$HOME/Applications/Wallpaper Veil.app" --args --ui-test
+```
+
+This mode opens About, checks native current/newer/error fixtures, then invokes
+the same manual action against public GitHub. It writes `ui-check.json` and
+`update-check.json` under Application Support. Normal startup performs no update
+check. The UI test's diagnostics use the signed version metadata.
+
+Before publication, verify a clean committed build, regression/feature results,
+restoration, signatures and package provenance. After publication, anonymously
+download the ZIP/checksum, verify the received artifact and perform a fresh
+installed-app smoke check. The live updater should then identify the published
+tag as current. Retain a verified previous release ZIP and disclose unqualified
+hardware/permission cases.
