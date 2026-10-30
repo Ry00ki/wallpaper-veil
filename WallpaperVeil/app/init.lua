@@ -130,6 +130,22 @@ local ok, failure = xpcall(function()
         if not success then writeReport({ok=false,error=tostring(err),process=process()}) end
     end)
     if os.getenv("WV_UI_TEST") == "1" then
+        local function failUITest(problem, path, kind)
+            -- Receipt writing and native diagnostics can fail independently.
+            -- Always stop network work and close our window before retrying either.
+            pcall(nativeUI.cancelUpdateCheck)
+            pcall(nativeUI.closeAbout)
+            local read, result = pcall(nativeUI.diagnostics)
+            if not read or type(result) ~= "table" then result = {} end
+            result.ok = false
+            result.error = tostring(problem)
+            result.kind = kind or "native-About-qualification"
+            result.observedAtUTC = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            local written, failure = pcall(writeReport, result, path)
+            if not written then
+                pcall(function() hs.printf("Wallpaper Veil UI qualification receipt failed: %s", tostring(failure)) end)
+            end
+        end
         after(1, function()
             local success, err = xpcall(function()
                 nativeUI.showAbout()
@@ -171,31 +187,47 @@ local ok, failure = xpcall(function()
                         nativeUI.checkForUpdates()
                         local deadline = hs.timer.secondsSinceEpoch() + 65
                         local function pollUpdate()
-                            local result = nativeUI.diagnostics()
-                            if result.updateInProgress and hs.timer.secondsSinceEpoch() < deadline then
-                                after(0.25, pollUpdate)
-                                return
+                            local passed, problem = xpcall(function()
+                                local result = nativeUI.diagnostics()
+                                if result.updateInProgress and hs.timer.secondsSinceEpoch() < deadline then
+                                    after(0.25, pollUpdate)
+                                    return
+                                end
+                                if result.updateInProgress then
+                                    nativeUI.cancelUpdateCheck()
+                                    result = nativeUI.diagnostics()
+                                    result.qualificationTimedOut = true
+                                    result.error = "The update-check qualification deadline was reached."
+                                end
+                                result.ok = not result.qualificationTimedOut and not result.updateInProgress and
+                                    (result.updateState == "current" or result.updateState == "ahead" or
+                                        result.updateState == "available")
+                                result.kind = "live-public-GitHub-release-check"
+                                result.observedAtUTC = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                                local saved, why = nativeUI.saveAboutPreview(support .. "/about-update-preview.png")
+                                assert(saved, why or "The update-check About view could not be captured.")
+                                result.previewSaved = true
+                                writeReport(result, support .. "/update-check.json")
+                                after(1, function()
+                                    local closed, failure = pcall(nativeUI.closeAbout)
+                                    if not closed then
+                                        failUITest(failure, support .. "/update-check.json", "live-public-GitHub-release-check")
+                                    end
+                                end)
+                            end, debug.traceback)
+                            if not passed then
+                                failUITest(problem, support .. "/update-check.json", "live-public-GitHub-release-check")
                             end
-                            result.ok = not result.updateInProgress and
-                                (result.updateState == "current" or result.updateState == "ahead" or
-                                    result.updateState == "available")
-                            result.kind = "live-public-GitHub-release-check"
-                            result.observedAtUTC = os.date("!%Y-%m-%dT%H:%M:%SZ")
-                            nativeUI.saveAboutPreview(support .. "/about-update-preview.png")
-                            writeReport(result, support .. "/update-check.json")
-                            after(1, function() pcall(nativeUI.closeAbout) end)
                         end
                         after(0.25, pollUpdate)
                     end, debug.traceback)
                     if not captured then
-                        pcall(nativeUI.closeAbout)
-                        writeReport({ok=false,error=problem}, support .. "/ui-check.json")
+                        failUITest(problem, support .. "/ui-check.json")
                     end
                 end)
             end, debug.traceback)
             if not success then
-                pcall(nativeUI.closeAbout)
-                writeReport({ok=false,error=err}, support .. "/ui-check.json")
+                failUITest(err, support .. "/ui-check.json")
             end
         end)
     end

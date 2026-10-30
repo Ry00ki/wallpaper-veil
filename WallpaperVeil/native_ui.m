@@ -21,10 +21,12 @@ static BOOL WVConsoleSuppressed = NO;
 @property(nonatomic, strong) NSProgressIndicator *updateProgress;
 @property(nonatomic, strong) NSURLSession *updateSession;
 @property(nonatomic, strong) NSURLSessionDataTask *updateTask;
+@property(nonatomic, strong) NSTimer *updateDeadline;
 @property(nonatomic, strong) NSMutableArray *releasePages;
 @property(nonatomic, copy) NSDictionary *updateResult;
 @property(nonatomic) NSUInteger updateGeneration;
 - (void)checkForUpdates:(id)sender;
+- (void)cancelUpdateCheck;
 - (void)openRelease:(id)sender;
 - (void)finishUpdate:(NSDictionary *)result;
 - (void)fetchReleasePage:(NSUInteger)page generation:(NSUInteger)generation;
@@ -136,16 +138,26 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     self.aboutWindow = window;
 }
 - (void)finishUpdate:(NSDictionary *)result {
+    // Every terminal path invalidates queued callbacks and the whole-check clock.
+    self.updateGeneration++;
+    [self.updateDeadline invalidate];
+    self.updateDeadline = nil;
+    [self.updateTask cancel];
+    [self.updateSession invalidateAndCancel];
     self.updateResult = result;
     self.updateLabel.stringValue = result[@"message"] ?: @"";
     self.updateButton.enabled = YES;
     self.updateButton.title = @"Check Again";
     [self.updateProgress stopAnimation:nil];
     self.releaseButton.hidden = ![result[@"latestURL"] length];
-    [self.updateSession finishTasksAndInvalidate];
     self.updateSession = nil;
     self.updateTask = nil;
     self.releasePages = nil;
+}
+- (void)cancelUpdateCheck {
+    if (!self.updateTask && !self.updateDeadline) return;
+    [self finishUpdate:@{@"state": @"cancelled",
+        @"message": @"Update check canceled. Click Check Again to retry."}];
 }
 - (void)checkForUpdates:(id)sender {
     (void)sender;
@@ -167,7 +179,14 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     configuration.timeoutIntervalForRequest = 15;
     configuration.timeoutIntervalForResource = 45;
     self.updateSession = [NSURLSession sessionWithConfiguration:configuration delegate:self delegateQueue:NSOperationQueue.mainQueue];
-    [self fetchReleasePage:1 generation:self.updateGeneration];
+    NSUInteger generation = self.updateGeneration;
+    self.updateDeadline = [NSTimer timerWithTimeInterval:45 repeats:NO block:^(NSTimer *timer) {
+        (void)timer;
+        if (generation != self.updateGeneration) return;
+        [self finishUpdate:WVUpdateError(@"The update check timed out after 45 seconds. Check your connection and try again.")];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:self.updateDeadline forMode:NSRunLoopCommonModes];
+    [self fetchReleasePage:1 generation:generation];
 }
 - (void)fetchReleasePage:(NSUInteger)page generation:(NSUInteger)generation {
     // Never follow a server-supplied pagination URL or an asset download URL.
@@ -445,6 +464,7 @@ static int WVDiagnostics(lua_State *L) {
             @"repositoryActionWired": @(repositoryWired), @"noticesActionWired": @(noticesWired),
             @"aboutIconPresent": @(iconPresent), @"updateActionWired": @(updateWired),
             @"releaseActionWired": @(releaseWired), @"updateInProgress": @(WVController.updateTask != nil),
+            @"updateDeadlineActive": @(WVController.updateDeadline.isValid),
             @"currentReleaseTag": NSBundle.mainBundle.infoDictionary[@"WVReleaseTag"] ?: @"",
             @"releaseChannel": NSBundle.mainBundle.infoDictionary[@"WVReleaseChannel"] ?: @"",
             @"currentVersion": NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"",
@@ -458,7 +478,7 @@ static int WVDiagnostics(lua_State *L) {
     for (NSString *key in @[@"configured", @"preferencesSuppressed", @"consoleSuppressed",
         @"engineWindowsVisible", @"nativeMainMenuReady", @"aboutWindowCreated", @"aboutVisible",
         @"repositoryActionWired", @"noticesActionWired", @"aboutIconPresent",
-        @"updateActionWired", @"releaseActionWired", @"updateInProgress"])
+        @"updateActionWired", @"releaseActionWired", @"updateInProgress", @"updateDeadlineActive"])
         WVSetBoolean(L, key.UTF8String, [values[key] boolValue]);
     WVSetString(L, "aboutTitle", values[@"aboutTitle"]);
     WVSetString(L, "repositoryURL", values[@"repositoryURL"]);
@@ -494,6 +514,10 @@ static int WVCheckForUpdates(lua_State *L) {
     });
     lua_pushboolean(L, YES); return 1;
 }
+static int WVCancelUpdateCheck(lua_State *L) {
+    WVOnMain(^{ [WVController cancelUpdateCheck]; });
+    return WVDiagnostics(L);
+}
 // Test mode can render deterministic results without any network or browser action.
 static int WVTestUpdateResponse(lua_State *L) {
     if (strcmp(getenv("WV_UI_TEST") ?: "", "1") != 0) return luaL_error(L, "Update fixtures require WV_UI_TEST=1");
@@ -505,8 +529,6 @@ static int WVTestUpdateResponse(lua_State *L) {
     WVOnMain(^{
         if (!WVController) WVConfigureOnMain();
         [WVController makeAbout];
-        WVController.updateGeneration++;
-        [WVController.updateTask cancel];
         if (result[@"releases"]) result = WVEvaluateReleases(result[@"releases"], NSBundle.mainBundle.infoDictionary[@"WVReleaseTag"], NSBundle.mainBundle.infoDictionary[@"WVReleaseChannel"]);
         [WVController finishUpdate:result];
     });
@@ -540,7 +562,8 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
     static const luaL_Reg functions[] = {
         {"configure", WVConfigure}, {"showAbout", WVShowAbout},
         {"diagnostics", WVDiagnostics}, {"closeAbout", WVCloseAbout},
-        {"checkForUpdates", WVCheckForUpdates}, {"testUpdateResponse", WVTestUpdateResponse},
+        {"checkForUpdates", WVCheckForUpdates}, {"cancelUpdateCheck", WVCancelUpdateCheck},
+        {"testUpdateResponse", WVTestUpdateResponse},
         {"saveAboutPreview", WVSaveAboutPreview},
         {"loginStatus", WVLoginStatus}, {"setLaunchAtLogin", WVSetLaunchAtLogin},
         {"openLoginSettings", WVOpenLoginSettings}, {NULL, NULL}
