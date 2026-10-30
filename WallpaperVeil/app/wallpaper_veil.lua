@@ -1,6 +1,6 @@
 -- A configurable translucent colour layer between wallpaper and desktop items.
 -- Photos rotation continues underneath; this configuration never reads Photos.
-local M = {canvases = {}}
+local M = {canvases = {}, running = false, generation = 0}
 local prefix = "wallpaperVeil."
 local presets = {
     {name = "Black", color = {red = 0, green = 0, blue = 0, alpha = 1}},
@@ -84,6 +84,7 @@ local function updateMenu()
 end
 
 function M.rebuild()
+    if not M.running then return end
     clearCanvases()
     if M.enabled then
         for _, screen in ipairs(hs.screen.allScreens()) do
@@ -478,7 +479,8 @@ end
 
 function M.status()
     local status = {
-        enabled = M.enabled, opacity = M.opacity, launchAtLogin = hs.autoLaunch(),
+        enabled = M.enabled, running = M.running, opacity = M.opacity,
+        launchAtLogin = M.loginItemStatus and M.loginItemStatus().enabled or false,
         hammerspoonIconVisible = hs.menuIcon(),
         color = normalizeColor(M.color), colorHex = M.colorHex(M.color), colorName = M.colorName(),
         savedColorCount = #M.savedColors, undoColorCount = #M.deletedColors,
@@ -501,6 +503,8 @@ function M.status()
 end
 
 function M.stop()
+    M.running = false
+    M.generation = M.generation + 1
     if M.widgets then M.widgets.stop() end
     if M.picker then
         -- Shutdown must finish synchronously and must not reopen a queued editor.
@@ -516,33 +520,50 @@ function M.stop()
             panel.showsAlpha(session.previousShowsAlpha)
         end
     end
-    if M.screenWatcher then M.screenWatcher:stop() end
-    if M.wakeWatcher then M.wakeWatcher:stop() end
-    if M.refreshTimer then M.refreshTimer:stop() end
+    if M.screenWatcher then M.screenWatcher:stop(); M.screenWatcher = nil end
+    if M.wakeWatcher then M.wakeWatcher:stop(); M.wakeWatcher = nil end
+    if M.refreshTimer then M.refreshTimer:stop(); M.refreshTimer = nil end
     clearCanvases()
     if M.menu then M.menu:delete(); M.menu = nil end
 end
 
 function M.start()
-    M.widgets = require("desktop_widgets").start()
-    M.enabled = hs.settings.get(prefix .. "enabled") ~= false
-    local savedOpacity = hs.settings.get(prefix .. "opacity")
-    M.opacity = type(savedOpacity) == "number" and savedOpacity >= 0.10
-        and savedOpacity <= 0.80 and savedOpacity or 0.40
-    M.color = normalizeColor(hs.settings.get(prefix .. "color")) or normalizeColor(presets[3].color)
-    M.savedColors = readPalette(hs.settings.get(prefix .. "savedColors"))
-    M.deletedColors = readPalette(hs.settings.get(prefix .. "deletedColors"))
-    M.menu = assert(hs.menubar.new(true, "WallpaperVeilStandalone"), "Cannot create wallpaper veil menu")
-    M.menu:setMenu(M.menuItems)
-    M.refreshTimer = hs.timer.delayed.new(0.5, M.rebuild)
-    M.screenWatcher = hs.screen.watcher.new(function() M.refreshTimer:start() end):start()
-    M.wakeWatcher = hs.caffeinate.watcher.new(function(event)
-        if event == hs.caffeinate.watcher.systemDidWake
-            or event == hs.caffeinate.watcher.screensDidWake then
-            M.refreshTimer:start()
-        end
-    end):start()
-    M.rebuild()
+    if M.running then return M end
+    M.running = true
+    M.generation = M.generation + 1
+    local token = M.generation
+    local ok, failure = xpcall(function()
+        M.widgets = require("desktop_widgets")
+        M.widgets.start()
+        M.enabled = hs.settings.get(prefix .. "enabled") ~= false
+        local savedOpacity = hs.settings.get(prefix .. "opacity")
+        M.opacity = type(savedOpacity) == "number" and savedOpacity >= 0.10
+            and savedOpacity <= 0.80 and savedOpacity or 0.40
+        M.color = normalizeColor(hs.settings.get(prefix .. "color")) or normalizeColor(presets[3].color)
+        M.savedColors = readPalette(hs.settings.get(prefix .. "savedColors"))
+        M.deletedColors = readPalette(hs.settings.get(prefix .. "deletedColors"))
+        M.menu = assert(hs.menubar.new(true, "WallpaperVeilStandalone"), "Cannot create wallpaper veil menu")
+        M.menu:setMenu(M.menuItems)
+        M.refreshTimer = hs.timer.delayed.new(0.5, function()
+            if M.running and M.generation == token then M.rebuild() end
+        end)
+        M.screenWatcher = hs.screen.watcher.new(function()
+            if M.running and M.generation == token and M.refreshTimer then M.refreshTimer:start() end
+        end):start()
+        M.wakeWatcher = hs.caffeinate.watcher.new(function(event)
+            if not M.running or M.generation ~= token then return end
+            if event == hs.caffeinate.watcher.systemDidWake
+                or event == hs.caffeinate.watcher.screensDidWake then
+                M.refreshTimer:start()
+            end
+        end):start()
+        M.rebuild()
+
+    end, debug.traceback)
+    if not ok then
+        M.stop()
+        error(failure, 0)
+    end
     return M
 end
 

@@ -2,7 +2,18 @@
 
 Changes are grouped by release. This project has not published a stable release.
 
-## Unreleased
+## 0.1.3 preview - 30.10.26
+
+- Confirm brightness requests by hardware read-back, retry transient writes within a fixed bound, and follow newer source targets without waiting for an obsolete request.
+- Separate source-write and follower failures in acceptance; verify both brightness restorations before resuming synchronization.
+- Add app-owned launch-at-login controls and explicit approval state under App settings.
+- Stop queued app/display callbacks on shutdown and clean up partial startup failures; repeated starts keep a single menu and watcher set.
+- Bound Notification Center preservation even when snapshots fail; abort safely when an event tap cannot start.
+- Run portable brightness, restoration, widget failure and lifecycle regression suites in source checks.
+
+Actual login-session startup, Accessibility-granted UI automation and sleep/Spaces/display connection qualification remain tracked separately.
+
+## 0.1.2 preview - 30.10.26
 
 ### Added
 

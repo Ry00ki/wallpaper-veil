@@ -1,6 +1,7 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
 #import <objc/runtime.h>
+#import <ServiceManagement/ServiceManagement.h>
 #include "lua.h"
 #include "lauxlib.h"
 
@@ -194,6 +195,77 @@ static void WVSetBoolean(lua_State *L, const char *key, BOOL value) {
 static void WVSetString(lua_State *L, const char *key, NSString *value) {
     lua_pushstring(L, (value ?: @"").UTF8String); lua_setfield(L, -2, key);
 }
+static NSDictionary *WVLoginCommand(NSString *command) {
+    NSURL *outer = NSBundle.mainBundle.bundleURL;
+    for (NSUInteger index = 0; index < 3; index++) outer = outer.URLByDeletingLastPathComponent;
+    NSBundle *launcher = [NSBundle bundleWithURL:outer];
+    if (![launcher.bundleIdentifier isEqualToString:@"com.ry00ki.wallpaperveil.launcher"] ||
+        ![launcher.executableURL.lastPathComponent isEqualToString:@"WallpaperVeil"]) {
+        return @{@"ok": @NO, @"statusString": @"unavailable",
+                 @"error": @{@"description": @"The installed Wallpaper Veil launcher could not be found."}};
+    }
+    NSTask *task = [[NSTask alloc] init];
+    task.executableURL = launcher.executableURL;
+    task.arguments = @[command];
+    NSPipe *output = NSPipe.pipe;
+    task.standardOutput = output;
+    task.standardError = [NSFileHandle fileHandleWithNullDevice];
+    NSError *error = nil;
+    if (![task launchAndReturnError:&error]) {
+        return @{@"ok": @NO, @"statusString": @"unavailable",
+                 @"error": @{@"description": error.localizedDescription ?: @"The login setting is unavailable."}};
+    }
+    NSDate *deadline = [NSDate dateWithTimeIntervalSinceNow:5];
+    while (task.running && deadline.timeIntervalSinceNow > 0) [NSThread sleepForTimeInterval:0.01];
+    if (task.running) {
+        [task terminate];
+        return @{@"ok": @NO, @"statusString": @"unavailable",
+                 @"error": @{@"description": @"The login setting did not respond. Check Login Items in System Settings."}};
+    }
+    NSData *data = [output.fileHandleForReading readDataToEndOfFile];
+    NSDictionary *result = [NSJSONSerialization JSONObjectWithData:data options:0 error:&error];
+    if (![result isKindOfClass:NSDictionary.class]) {
+        return @{@"ok": @NO, @"statusString": @"unavailable",
+                 @"error": @{@"description": @"The login setting could not be read. Check Login Items in System Settings."}};
+    }
+    return result;
+}
+
+static int WVPushLoginStatus(lua_State *L, NSDictionary *status) {
+    lua_newtable(L);
+    for (NSString *key in @[@"ok", @"supported", @"registered", @"enabled", @"requiresApproval", @"changed"])
+        WVSetBoolean(L, key.UTF8String, [status[key] boolValue]);
+    for (NSString *key in @[@"statusString", @"targetBundleID", @"registration"])
+        WVSetString(L, key.UTF8String, status[key]);
+    WVSetString(L, "error", [status[@"error"] isKindOfClass:NSDictionary.class] ? status[@"error"][@"description"] : nil);
+    return 1;
+}
+
+static int WVLoginStatus(lua_State *L) {
+    return WVPushLoginStatus(L, WVLoginCommand(@"--login-status"));
+}
+
+static int WVSetLaunchAtLogin(lua_State *L) {
+    BOOL enabled = lua_toboolean(L, 1);
+    NSDictionary *result = WVLoginCommand(enabled ? @"--enable-login" : @"--disable-login");
+    if (![result[@"ok"] boolValue]) {
+        WVOnMain(^{
+            NSAlert *alert = [[NSAlert alloc] init];
+            alert.messageText = @"Wallpaper Veil";
+            alert.informativeText = @"The login setting could not be changed. Check Login Items in System Settings and try again.";
+            [alert addButtonWithTitle:@"OK"];
+            [alert runModal];
+        });
+    }
+    return WVPushLoginStatus(L, result);
+}
+
+static int WVOpenLoginSettings(lua_State *L) {
+    WVOnMain(^{ [SMAppService openSystemSettingsLoginItems]; });
+    lua_pushboolean(L, YES);
+    return 1;
+}
+
 static int WVDiagnostics(lua_State *L) {
     __block NSDictionary *values;
     WVOnMain(^{
@@ -296,7 +368,9 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
     static const luaL_Reg functions[] = {
         {"configure", WVConfigure}, {"showAbout", WVShowAbout},
         {"diagnostics", WVDiagnostics}, {"closeAbout", WVCloseAbout},
-        {"saveAboutPreview", WVSaveAboutPreview}, {NULL, NULL}
+        {"saveAboutPreview", WVSaveAboutPreview},
+        {"loginStatus", WVLoginStatus}, {"setLaunchAtLogin", WVSetLaunchAtLogin},
+        {"openLoginSettings", WVOpenLoginSettings}, {NULL, NULL}
     };
     luaL_newlib(L, functions);
     return 1;

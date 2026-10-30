@@ -44,3 +44,11 @@ jobs:
               subprocess.run(['luac5.4', '-p', str(path)], check=True)
           print(f'Parsed {len(files)} Lua files with Lua 5.4')
           PY
+      - name: Run Lua regression tests
+        run: |
+          python - <<'PYTEST'
+          from pathlib import Path
+          import subprocess
+          for path in sorted(Path('WallpaperVeil/tests').glob('test_*.lua')):
+              subprocess.run(['lua5.4', str(path)], check=True)
+          PYTEST

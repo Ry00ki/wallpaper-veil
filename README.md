@@ -15,7 +15,7 @@ Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Con
 - Use optional desktop-widget and clock/Notification Center controls.
 - Access Quit and About Wallpaper Veil from the app's menu.
 
-The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. Sleep/wake, login startup and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
+The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. Sleep/wake, actual login-session startup and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
 
 ## How it runs
 
@@ -23,7 +23,7 @@ The app has a small Objective-C launcher, an app-owned Cocoa UI module and a nes
 
 Executable code and native modules live inside the completed app bundle. Writable state lives in `~/Library/Application Support/Wallpaper Veil`, with an independent macOS preferences domain. Once built, the app does not need the source checkout, Python or a separately installed Hammerspoon to run.
 
-On first normal launch, it can import existing `wallpaperVeil.*` preferences from Hammerspoon into its own domain. It does not replace the original Hammerspoon configuration. Upstream update checks, crash uploads and AppleScript support are disabled in this prototype. Login registration is not implemented by the prototype.
+On first normal launch, it can import existing `wallpaperVeil.*` preferences from Hammerspoon into its own domain. It does not replace the original Hammerspoon configuration. Upstream update checks, crash uploads and AppleScript support are disabled in this prototype. Launch at login is available under App settings. Registration targets the outer launcher so login uses the same controlled startup as normal launch; macOS may require approval in Login Items settings.
 
 Relevant source:
 
@@ -87,13 +87,13 @@ Before normal launch, stop an existing Hammerspoon-based veil to avoid duplicate
 open "$HOME/Applications/Wallpaper Veil.app"
 ```
 
-Use its menu-bar item to adjust the tint or quit. About Wallpaper Veil is the final menu item and opens an app-owned window with an Open GitHub Repository button pointing to this repository, plus access to bundled licence notices. macOS Accessibility approval is needed for the optional widget/clock automation; tint controls do not require that approval.
+Use its menu-bar item to adjust the tint or quit. App settings includes Launch at login, Login Items settings and the Accessibility permission entry for optional automation. Enabling a pending login registration requires approval in System Settings; registering it is separate from qualifying a real later login. About Wallpaper Veil is the final menu item and opens an app-owned window with an Open GitHub Repository button pointing to this repository, plus access to bundled licence notices. macOS Accessibility approval is needed for the optional widget/clock automation; tint controls do not require that approval.
 
 The current `handoff.py` is a local development helper with fixed default development and installation paths. Inspect its constants and recovery behavior before using it on another setup. Its handoff/self-test modes may stop a matching legacy process and make small temporary hardware-brightness changes. They are active acceptance tests, not passive diagnostics. Prefer a verified previous Wallpaper Veil bundle for recovery. Restoring an older Hammerspoon setup requires that app to be present and validated first; do not assume it remains installed. A single successful run does not establish reliability across displays or macOS versions.
 
 ## Repository checks and preview builds
 
-Source checks parse the app Lua and compile Python on every push and pull request. The [Wallpaper Veil preview build](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/preview-build.yml) workflow builds a ZIP only when manually dispatched. Its public preview artifact includes a SHA-256 checksum and verifies the extracted app signature; the workflow does not launch the app or exercise hardware. The artifact is an ad hoc signed, unnotarized preview, not a stable release. See [CI details](WallpaperVeil/ci/README.md).
+Source checks parse the app Lua, compile Python and run deterministic regression suites on every push and pull request. The [Wallpaper Veil preview build](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/preview-build.yml) workflow builds a ZIP only when manually dispatched. Its public preview artifact includes a SHA-256 checksum and verifies the extracted app signature; the workflow does not launch the app or exercise hardware. The artifact is an ad hoc signed, unnotarized preview, not a stable release. See [CI details](WallpaperVeil/ci/README.md).
 
 ## Contributing and reporting problems
 
