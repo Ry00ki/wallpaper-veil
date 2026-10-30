@@ -35,7 +35,7 @@ def package(app: Path, destination: Path) -> Path:
         raise RuntimeError('Artifact output must remain outside the signed app bundle')
     destination.mkdir(parents=True, exist_ok=True)
     verify(app)
-    archive = destination / 'wallpaper-veil-private-preview.zip'
+    archive = destination / 'wallpaper-veil-preview.zip'
     if archive.exists():
         raise RuntimeError('Choose an artifact directory without an existing preview ZIP')
     subprocess.run(['/usr/bin/ditto', '-c', '-k', '--norsrc', '--noextattr', '--keepParent',
@@ -56,7 +56,7 @@ def package(app: Path, destination: Path) -> Path:
         'extracted_signatures_verified': True, 'app_launched': False,
         'engine_recompiled_from_source': False, 'launcher_recompiled_from_source': True,
         'ui_recompiled_from_source': True,
-        'distribution': 'Private local preview, ad hoc signed; not notarized or App Store approved',
+        'distribution': 'Experimental preview, ad hoc signed; not Developer ID signed or notarized',
     }
     (destination / 'wallpaper-veil-package.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(json.dumps(summary, indent=2))

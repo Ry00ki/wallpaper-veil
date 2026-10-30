@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Build a private Wallpaper Veil prototype using an existing native runtime.
+"""Build a Wallpaper Veil prototype using an existing native runtime.
 
 Only the small launcher is compiled. The Hammerspoon engine is NOT rebuilt
 from the local source fork. This script never launches an app, writes application
@@ -69,7 +69,7 @@ def bundled_setup(original: str) -> str:
     tail = tail.replace("return require'hs._coresetup'.setup(...)",
         "return require'hs._coresetup'.setup(modpath, frameworkspath, prettypath, fullpath, "
         "configdir, docstringspath, true, autoload_extensions)")
-    return '''-- Wallpaper Veil private binary-runtime prototype bootstrap.
+    return '''-- Wallpaper Veil binary-runtime prototype bootstrap.
 -- All executable Lua/native modules are bundled; state lives in Application Support.
 local modpath, frameworkspath, prettypath, fullpath, configdir, docstringspath, hasinitfile, autoload_extensions = ...
 local code = assert(os.getenv("WV_APP_CODE"), "Wallpaper Veil launcher is required")
@@ -171,7 +171,7 @@ def bundle_component_notices(project: Path, acknowledgements: Path) -> dict:
 def build(output: Path, runtime: Path, own: Path) -> dict:
     project = own.parent
     if platform.system() != "Darwin":
-        raise RuntimeError("This private prototype must be built on macOS")
+        raise RuntimeError("This prototype must be built on macOS")
     documents = (Path.home() / "Documents").resolve()
     if output.is_relative_to(documents) or project.resolve().is_relative_to(documents):
         raise RuntimeError("Wallpaper Veil source and build output must remain outside Documents")
@@ -256,7 +256,7 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
                     "NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationAlwaysUsageDescription"]:
             info.pop(key, None)
         info.update({"CFBundleIdentifier": APP_ID, "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "2",
+                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.2", "CFBundleVersion": "3",
                      "CFBundleIconFile": "WallpaperVeil.icns",
                      "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
                      "NSAppleScriptEnabled": False, "SUEnableAutomaticChecks": False,
@@ -272,7 +272,7 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             "CFBundleDevelopmentRegion": "en", "CFBundleInfoDictionaryVersion": "6.0",
             "CFBundlePackageType": "APPL", "CFBundleIdentifier": LAUNCHER_ID,
             "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "2",
+            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.2", "CFBundleVersion": "3",
             "LSUIElement": True, "LSMinimumSystemVersion": original_info.get("LSMinimumSystemVersion", "13.0"),
             "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
             "NSHumanReadableCopyright": info["NSHumanReadableCopyright"],
@@ -296,9 +296,9 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             "-I", str(project / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit",
             str(own / "native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
         provenance = {
-            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.1", "build": "2",
+            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.2", "build": "3",
             "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "type": "private binary-runtime prototype with NSWorkspace launcher and nested native application",
+            "type": "binary-runtime prototype with NSWorkspace launcher and nested native application",
             "runtime_relative_path": HELPER_RELATIVE_PATH,
             "launch_method": "NSWorkspace.openApplicationAtURL with early arguments and controlled WV environment",
             "launcher_is_permanent_supervisor": False,

@@ -1,6 +1,12 @@
 # Contributing to Wallpaper Veil
 
-Wallpaper Veil is currently an experimental local prototype. Keep contributions focused on the wallpaper utility and its standalone lifecycle. Discuss a full engine rebuild, distribution changes or a major architecture change before combining it with a small fix.
+Wallpaper Veil is an experimental public preview. Keep contributions focused on the wallpaper utility and its standalone lifecycle. Discuss a full engine rebuild, distribution changes or a major architecture change before combining it with a small fix.
+
+## Issues and pull requests
+
+Use [issues](https://github.com/Ry00ki/wallpaper-veil/issues) for reproducible bugs and feature proposals. You can open a focused fix directly as a pull request.
+
+Fork the repository, create a branch from `main`, make a scoped change, and open a [pull request](https://github.com/Ry00ki/wallpaper-veil/pulls) against `main`. Explain the resulting behavior and checks performed. The Ubuntu source checks run automatically; macOS preview builds are dispatched manually.
 
 ## Getting started
 

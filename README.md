@@ -1,8 +1,11 @@
 # Wallpaper Veil
 
+[![Source checks](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml/badge.svg)](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml)
+![Experimental preview](https://img.shields.io/badge/status-experimental%20preview-orange)
+
 Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
 
-This repository contains an experimental standalone-app prototype based on Hammerspoon 1.1.1. The current build compiles Wallpaper Veil's launcher and native UI bridge, and bundles the matching prebuilt Hammerspoon engine with app-owned Lua code. It does not yet rebuild the complete native engine from this source fork.
+Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Contributions, bug reports and feature requests are welcome. The current build compiles Wallpaper Veil's launcher and native UI bridge, and bundles the matching prebuilt Hammerspoon engine with app-owned Lua code. It does not yet rebuild the complete native engine from this source fork.
 
 ## Features and status
 
@@ -12,7 +15,7 @@ This repository contains an experimental standalone-app prototype based on Hamme
 - Use optional desktop-widget and clock/Notification Center controls.
 - Access Quit and About Wallpaper Veil from the app's menu.
 
-The prototype is for local evaluation. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. Sleep/wake, login startup and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
+The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. Sleep/wake, login startup and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
 
 ## How it runs
 
@@ -29,7 +32,7 @@ Relevant source:
 - [Application Lua](WallpaperVeil/app)
 - [Local handoff helper](WallpaperVeil/handoff.py)
 
-## Build a local prototype
+## Build a preview
 
 Requirements:
 
@@ -73,28 +76,28 @@ The installer preserves an existing app as a verified ZIP, installs the new bund
 Close any other Wallpaper Veil copy before verification:
 
 ```sh
-open "$HOME/Developer/Wallpaper Veil/build.noindex/Wallpaper Veil.app" --args --verify-only
+open "$HOME/Applications/Wallpaper Veil.app" --args --verify-only
 ```
 
 Verification-only checks identity, isolated settings/code paths and application Lua syntax, then exits. It does not run the hardware-brightness acceptance sequence.
 
-Before normal launch, stop an existing Hammerspoon-based veil to avoid duplicate overlays. Then open the built app:
+Before normal launch, stop an existing Hammerspoon-based veil to avoid duplicate overlays. Then open the canonical installed app:
 
 ```sh
-open "$HOME/Developer/Wallpaper Veil/build.noindex/Wallpaper Veil.app"
+open "$HOME/Applications/Wallpaper Veil.app"
 ```
 
 Use its menu-bar item to adjust the tint or quit. About Wallpaper Veil is the final menu item and opens an app-owned window with an Open GitHub Repository button pointing to this repository, plus access to bundled licence notices. macOS Accessibility approval is needed for the optional widget/clock automation; tint controls do not require that approval.
 
 The current `handoff.py` is a local development helper with fixed default development and installation paths. Inspect its constants and recovery behavior before using it on another setup. Its handoff/self-test modes may stop a matching legacy process and make small temporary hardware-brightness changes. They are active acceptance tests, not passive diagnostics. Prefer a verified previous Wallpaper Veil bundle for recovery. Restoring an older Hammerspoon setup requires that app to be present and validated first; do not assume it remains installed. A single successful run does not establish reliability across displays or macOS versions.
 
-## Repository checks and private builds
+## Repository checks and preview builds
 
-Source checks parse the app Lua and compile Python on every push and pull request. The **Wallpaper Veil private preview** workflow builds a ZIP only when manually dispatched in a private repository. Its artifact includes a SHA256 checksum and verifies the extracted app signature; it does not launch the app or exercise hardware. See [CI details](WallpaperVeil/ci/README.md).
+Source checks parse the app Lua and compile Python on every push and pull request. The [Wallpaper Veil preview build](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/preview-build.yml) workflow builds a ZIP only when manually dispatched. Its public preview artifact includes a SHA-256 checksum and verifies the extracted app signature; the workflow does not launch the app or exercise hardware. The artifact is an ad hoc signed, unnotarized preview, not a stable release. See [CI details](WallpaperVeil/ci/README.md).
 
 ## Contributing and reporting problems
 
-See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md). Include reproducible steps and a minimal, redacted error excerpt when reporting a problem. Do not upload personal preferences, diagnostic receipts, display identifiers or complete private logs.
+[Report a bug](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=bug_report.yml), [suggest a feature](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=feature_request.yml), or [open a pull request](https://github.com/Ry00ki/wallpaper-veil/compare). See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md). Include reproducible steps and a minimal, redacted error excerpt when reporting a problem. Do not upload personal preferences, diagnostic receipts, display identifiers or complete private logs.
 
 ## Credits and licence
 

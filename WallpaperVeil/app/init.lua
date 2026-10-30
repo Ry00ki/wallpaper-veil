@@ -88,7 +88,7 @@ local ok, failure = xpcall(function()
         probe.menuBar={inMenuBar=wallpaperVeil.menu:isInMenuBar(),
             title=wallpaperVeil.menu:title(),frame=frame and {x=frame.x,y=frame.y,w=frame.w,h=frame.h} or nil}
         -- macOS 27 can remotely host status items; frame is diagnostic only.
-        probe.appVersion = "0.1.1"
+        probe.appVersion = "0.1.2"
         probe.nativeUI = nativeUI.diagnostics()
         probe.prototype = "Bundled upstream native runtime with app-owned launcher and Lua"
         writeReport(probe)

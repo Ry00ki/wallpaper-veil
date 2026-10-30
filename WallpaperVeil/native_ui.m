@@ -64,7 +64,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
         NSMakeRect(30, 186, 440, 20), 13, NSFontWeightRegular);
     versionLabel.textColor = NSColor.secondaryLabelColor;
     [content addSubview:versionLabel];
-    NSTextField *detail = WVLabel(@"Private standalone preview\nMIT licence. Open-source credits and additional notices\nare included with the app.",
+    NSTextField *detail = WVLabel(@"Standalone preview\nMIT licence. Open-source credits and additional notices\nare included with the app.",
         NSMakeRect(30, 115, 440, 58), 12, NSFontWeightRegular);
     detail.maximumNumberOfLines = 3;
     detail.cell.usesSingleLineMode = NO;

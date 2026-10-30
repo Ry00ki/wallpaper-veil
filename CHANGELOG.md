@@ -6,12 +6,12 @@ Changes are grouped by release. This project has not published a stable release.
 
 ### Added
 
-- An app-owned About window with private GitHub repository link and licence access.
+- Public issue and pull-request contribution links, plus a manually dispatched preview-build workflow.
+
+- An app-owned About window with GitHub repository link and licence access.
 - An original Wallpaper Veil icon and app-owned native menu.
 - Verified ZIP recovery backups and unindexed development build output to avoid duplicate app-search entries.
-
 - Explicit MIT licensing for Wallpaper Veil code, preserved upstream MIT notice and bundled third-party licence notices.
-
 - Wallpaper Veil standalone local prototype based on Hammerspoon 1.1.1.
 - Compiled Objective-C launcher using NSWorkspace to start a bundled native runtime app.
 - App-owned Lua startup, independent preferences and native Application Support state.
