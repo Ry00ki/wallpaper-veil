@@ -44,3 +44,20 @@ xcuserdata/
 *.xcscmblueprint
 
 Brewfile.lock.json
+
+# Wallpaper Veil private machine state and local tooling
+receipts/
+backups/
+logs/
+tools/
+*.build.json
+
+# Personal diagnostics and credentials
+diagnostics.json
+acceptance.json
+runtime.pid
+.env
+.env.*
+*.p12
+*.pfx
+*.key

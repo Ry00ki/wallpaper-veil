@@ -1,0 +1,28 @@
+name: Feature request
+description: Suggest an improvement to Wallpaper Veil.
+title: "Feature: "
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem or use case
+      description: Describe what you are trying to do and what gets in the way.
+    validations:
+      required: true
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Suggested behavior
+      description: Explain the result you want, including how it should fit into the app.
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Describe any current workaround or simpler alternative.
+  - type: textarea
+    id: context
+    attributes:
+      label: Relevant context
+      description: Include macOS or display constraints only when relevant. Do not include private preferences, account details, display identifiers or personal logs.

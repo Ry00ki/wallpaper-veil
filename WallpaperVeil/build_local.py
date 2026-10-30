@@ -1,0 +1,290 @@
+#!/usr/bin/env python3
+"""Build a private Wallpaper Veil prototype using an existing native runtime.
+
+Only the small launcher is compiled. The Hammerspoon engine is NOT rebuilt
+from the local source fork. This script never launches an app, writes application
+preferences, changes login items, or modifies the source runtime installation.
+"""
+from __future__ import annotations
+
+import argparse
+import datetime as dt
+import hashlib
+import json
+import os
+from pathlib import Path
+import platform
+import plistlib
+import shutil
+import subprocess
+import sys
+import tempfile
+import uuid
+
+APP_ID = "com.ry00ki.wallpaperveil"
+LAUNCHER_ID = "com.ry00ki.wallpaperveil.launcher"
+APP_NAME = "Wallpaper Veil"
+HELPER_RELATIVE_PATH = "Contents/Helpers/Wallpaper Veil Runtime.app"
+SOURCE_COMMIT = "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+RUNTIME_VERSION = "1.1.1"
+RUNTIME_BUILD = "6936"
+
+
+def run(*args: str, capture: bool = False) -> str:
+    result = subprocess.run(list(map(str, args)), check=True, text=True,
+                            stdout=subprocess.PIPE if capture else None,
+                            stderr=subprocess.PIPE if capture else None)
+    return result.stdout.strip() if capture else ""
+
+
+def sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as stream:
+        for block in iter(lambda: stream.read(1024 * 1024), b""):
+            digest.update(block)
+    return digest.hexdigest()
+
+
+def write_json(path: Path, value: dict) -> None:
+    path.write_text(json.dumps(value, indent=2, ensure_ascii=False) + "\n")
+
+
+def checked_source(project: Path) -> dict:
+    actual = run("/usr/bin/git", "-C", str(project), "rev-parse", "HEAD", capture=True)
+    tag = run("/usr/bin/git", "-C", str(project), "rev-parse", "1.1.1^{commit}", capture=True)
+    if tag != SOURCE_COMMIT:
+        raise RuntimeError("The local source fork's 1.1.1 tag does not match the audited upstream commit")
+    # Own committed project work may advance HEAD after the initial source fork.
+    run("/usr/bin/git", "-C", str(project), "merge-base", "--is-ancestor", SOURCE_COMMIT, actual)
+    return {"upstream_tag": "1.1.1", "upstream_commit": tag, "local_head": actual,
+            "local_branch": run("/usr/bin/git", "-C", str(project), "branch", "--show-current", capture=True),
+            "worktree_status": run("/usr/bin/git", "-C", str(project), "status", "--porcelain", capture=True).splitlines()}
+
+
+def bundled_setup(original: str) -> str:
+    split = "local preload = function(m) return function() return require(m) end end"
+    if original.count(split) != 1 or "return require'hs._coresetup'.setup(...)" not in original:
+        raise RuntimeError("Unrecognised native runtime setup.lua; refusing an unverified bootstrap patch")
+    tail = original.split(split, 1)[1]
+    tail = tail.replace("return require'hs._coresetup'.setup(...)",
+        "return require'hs._coresetup'.setup(modpath, frameworkspath, prettypath, fullpath, "
+        "configdir, docstringspath, true, autoload_extensions)")
+    return '''-- Wallpaper Veil private binary-runtime prototype bootstrap.
+-- All executable Lua/native modules are bundled; state lives in Application Support.
+local modpath, frameworkspath, prettypath, fullpath, configdir, docstringspath, hasinitfile, autoload_extensions = ...
+local code = assert(os.getenv("WV_APP_CODE"), "Wallpaper Veil launcher is required")
+local support = assert(os.getenv("WV_APPLICATION_SUPPORT"), "Wallpaper Veil state path is missing")
+assert(code == hs.processInfo.resourcePath .. "/WallpaperVeil", "Unexpected application code path")
+assert(hs.processInfo.bundleID == "com.ry00ki.wallpaperveil", "Unexpected application identity")
+configdir = support .. "/runtime"
+fullpath = code .. "/init.lua"
+prettypath = fullpath
+hasinitfile = true
+package.path = table.concat({code .. "/?.lua", code .. "/?/init.lua", modpath .. "/?.lua", modpath .. "/?/init.lua"}, ";")
+package.cpath = frameworkspath .. "/?.dylib"
+local preload = function(m) return function() return require(m) end end
+''' + tail
+
+
+def sign_bundle(app: Path) -> None:
+    """Sign nested files and containers inside out, retaining executable layout."""
+    magic = {b"\xfe\xed\xfa\xce", b"\xce\xfa\xed\xfe", b"\xfe\xed\xfa\xcf", b"\xcf\xfa\xed\xfe",
+             b"\xca\xfe\xba\xbe", b"\xbe\xba\xfe\xca", b"\xca\xfe\xba\xbf", b"\xbf\xba\xfe\xca"}
+    binaries = []
+    for path in app.rglob("*"):
+        if path.is_symlink() or not path.is_file():
+            continue
+        with path.open("rb") as stream:
+            if stream.read(4) in magic:
+                binaries.append(path)
+    for path in sorted(binaries, key=lambda p: len(p.parts), reverse=True):
+        args = ["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none"]
+        if path.name == "WallpaperVeilRuntime":
+            args += ["--identifier", APP_ID]
+        elif path.name == "WallpaperVeil":
+            args += ["--identifier", LAUNCHER_ID]
+        run(*args, str(path))
+    containers = [p for p in app.rglob("*") if p.is_dir() and not p.is_symlink()
+                  and p.suffix in {".framework", ".app", ".xpc"}]
+    for path in sorted(containers, key=lambda p: len(p.parts), reverse=True):
+        run("/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(path))
+    run("/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(app))
+    run("/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app))
+
+
+def build(output: Path, runtime: Path, own: Path) -> dict:
+    project = own.parent
+    if platform.system() != "Darwin":
+        raise RuntimeError("This private prototype must be built on macOS")
+    documents = (Path.home() / "Documents").resolve()
+    if output.is_relative_to(documents) or project.resolve().is_relative_to(documents):
+        raise RuntimeError("Wallpaper Veil source and build output must remain outside Documents")
+    if output.suffix != ".app":
+        raise RuntimeError("--output must name a .app bundle")
+    if runtime == output or output.is_relative_to(runtime):
+        raise RuntimeError("Build output must not replace or sit inside the source runtime")
+    source = checked_source(project)
+    original_info = plistlib.loads((runtime / "Contents/Info.plist").read_bytes())
+    if (original_info.get("CFBundleIdentifier") != "org.hammerspoon.Hammerspoon" or
+        original_info.get("CFBundleShortVersionString") != RUNTIME_VERSION or
+        original_info.get("CFBundleVersion") != RUNTIME_BUILD):
+        raise RuntimeError("Use the audited Hammerspoon 1.1.1 (6936) runtime bundle")
+    app_sources = own / "app"
+    if not (app_sources / "init.lua").is_file():
+        raise RuntimeError("WallpaperVeil/app/init.lua is missing")
+    if not (own / "launcher.m").is_file():
+        raise RuntimeError("WallpaperVeil/launcher.m is missing")
+    if output.exists():
+        marker = output / "Contents/Resources/wallpaper-veil-build.json"
+        if not marker.is_file() or json.loads(marker.read_text()).get("bundle_id") not in {APP_ID, LAUNCHER_ID}:
+            raise RuntimeError("Refusing to replace an existing bundle without Wallpaper Veil build provenance")
+    output.parent.mkdir(parents=True, exist_ok=True)
+    stage_root = Path(tempfile.mkdtemp(prefix=".wallpaper-veil-stage-", dir=output.parent))
+    stage = stage_root / output.name
+    try:
+        contents = stage / "Contents"
+        outer_resources = contents / "Resources"
+        macos = contents / "MacOS"
+        outer_resources.mkdir(parents=True)
+        macos.mkdir()
+        helper = stage / HELPER_RELATIVE_PATH
+        helper.parent.mkdir(parents=True)
+        run("/usr/bin/ditto", "--noqtn", str(runtime), str(helper))
+        runtime_contents = helper / "Contents"
+        resources = runtime_contents / "Resources"
+        engine = runtime_contents / "MacOS/WallpaperVeilRuntime"
+        (runtime_contents / "MacOS" / original_info["CFBundleExecutable"]).rename(engine)
+        code = resources / "WallpaperVeil"
+        code.mkdir()
+        code_hashes = {}
+        for path in sorted(app_sources.rglob("*.lua")):
+            if path.is_symlink():
+                raise RuntimeError(f"Application source must not be a symlink: {path}")
+            target = code / path.relative_to(app_sources)
+            target.parent.mkdir(parents=True, exist_ok=True)
+            text = path.read_text()
+            text = text.replace('"org.hammerspoon.Hammerspoon"', "hs.processInfo.bundleID")
+            text = text.replace("'org.hammerspoon.Hammerspoon'", "hs.processInfo.bundleID")
+            text = text.replace("Show Hammerspoon icon", "Show engine menu icon")
+            target.write_text(text)
+            code_hashes[str(target.relative_to(resources))] = sha256(target)
+        old_setup = (resources / "setup.lua").read_text()
+        (resources / "setup.lua").write_text(bundled_setup(old_setup))
+        acknowledgements = resources / "Acknowledgements"
+        acknowledgements.mkdir()
+        for name in ["LICENSE", "CREDITS.md",
+                     "Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.markdown",
+                     "Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.plist"]:
+            path = project / name
+            if path.is_file():
+                shutil.copy2(path, acknowledgements / path.name)
+        removed_login_helpers = []
+        login_items = runtime_contents / "Library/LoginItems"
+        if login_items.exists():
+            removed_login_helpers = [str(p.relative_to(runtime_contents)) for p in login_items.iterdir()]
+            shutil.rmtree(login_items)
+        info = dict(original_info)
+        for key in ["CFBundleDocumentTypes", "CFBundleURLTypes", "NSServices", "UTExportedTypeDeclarations",
+                    "UTImportedTypeDeclarations", "INIntentsSupported", "NSUserActivityTypes", "OSAScriptingDefinition",
+                    "SUFeedURL", "SUScheduledCheckInterval", "SUPublicEDKey", "NSAppTransportSecurity",
+                    "NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationAlwaysUsageDescription"]:
+            info.pop(key, None)
+        info.update({"CFBundleIdentifier": APP_ID, "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
+                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "1",
+                     "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
+                     "NSAppleScriptEnabled": False, "SUEnableAutomaticChecks": False,
+                     "SUAllowsAutomaticUpdates": False, "SUAutomaticallyUpdate": False, "SUSendProfileInfo": False,
+                     "NSAppleEventsUsageDescription": "Wallpaper Veil uses macOS automation for desktop controls.",
+                     "WVPrototypeType": "binary-runtime prototype with NSWorkspace launcher and nested native application",
+                     "WVRuntimeVersion": RUNTIME_VERSION, "WVRuntimeBuild": RUNTIME_BUILD,
+                     "WVUpstreamSourceCommit": SOURCE_COMMIT,
+                     "NSHumanReadableCopyright": "Wallpaper Veil. Includes Hammerspoon and third-party software; see bundled acknowledgements."})
+        with (runtime_contents / "Info.plist").open("wb") as stream:
+            plistlib.dump(info, stream)
+        outer_info = {
+            "CFBundleDevelopmentRegion": "en", "CFBundleInfoDictionaryVersion": "6.0",
+            "CFBundlePackageType": "APPL", "CFBundleIdentifier": LAUNCHER_ID,
+            "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
+            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "1",
+            "LSUIElement": True, "LSMinimumSystemVersion": original_info.get("LSMinimumSystemVersion", "13.0"),
+            "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
+            "NSHumanReadableCopyright": info["NSHumanReadableCopyright"],
+            "WVPrototypeType": info["WVPrototypeType"], "WVRuntimeBundleIdentifier": APP_ID,
+            "WVRuntimeRelativePath": HELPER_RELATIVE_PATH,
+        }
+        icon = resources / "AppIcon.icns"
+        if icon.is_file():
+            shutil.copy2(icon, outer_resources / icon.name)
+            outer_info["CFBundleIconFile"] = "AppIcon"
+        with (contents / "Info.plist").open("wb") as stream:
+            plistlib.dump(outer_info, stream)
+        clang = run("/usr/bin/xcrun", "--find", "clang", capture=True)
+        sdk = run("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path", capture=True)
+        run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=13.0",
+            "-framework", "Foundation", "-framework", "AppKit", str(own / "launcher.m"), "-o", str(macos / "WallpaperVeil"))
+        provenance = {
+            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.0", "build": "1",
+            "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "type": "private binary-runtime prototype with NSWorkspace launcher and nested native application",
+            "runtime_relative_path": HELPER_RELATIVE_PATH,
+            "launch_method": "NSWorkspace.openApplicationAtURL with early arguments and controlled WV environment",
+            "launcher_is_permanent_supervisor": False,
+            "engine_recompiled_from_source": False, "launcher_recompiled_from_source": True,
+            "source": source,
+            "runtime": {"input_bundle_name": runtime.name, "version": RUNTIME_VERSION, "build": RUNTIME_BUILD,
+                        "original_engine_sha256": sha256(runtime / "Contents/MacOS" / original_info["CFBundleExecutable"]),
+                        "original_setup_sha256": hashlib.sha256(old_setup.encode()).hexdigest()},
+            "source_hashes": {"launcher.m": sha256(own / "launcher.m"), "build_local.py": sha256(Path(__file__))},
+            "bundled_lua_hashes": code_hashes,
+            "bundled_setup_sha256": sha256(resources / "setup.lua"),
+            "launcher_architectures": run("/usr/bin/lipo", "-archs", str(macos / "WallpaperVeil"), capture=True),
+            "login_helper_policy": "Removed copied LoginItems; prototype does not register at login",
+            "removed_login_helpers": removed_login_helpers,
+            "distribution": "Ad hoc signed for local testing; not Developer ID signed or notarized",
+            "application_launched_by_builder": False,
+        }
+        write_json(outer_resources / "wallpaper-veil-build.json", provenance)
+        write_json(resources / "wallpaper-veil-build.json", provenance)
+        sign_bundle(stage)
+        prior = None
+        if output.exists():
+            prior = output.parent / (".wallpaper-veil-previous-" + uuid.uuid4().hex + ".app")
+            output.rename(prior)
+        try:
+            stage.rename(output)
+        except BaseException:
+            if prior:
+                prior.rename(output)
+            raise
+        if prior:
+            shutil.rmtree(prior)
+        report = dict(provenance)
+        report.update({"output_bundle_name": output.name, "codesign_verified_deep_strict": True,
+                       "signed_launcher_sha256": sha256(output / "Contents/MacOS/WallpaperVeil"),
+                       "signed_engine_sha256": sha256(output / HELPER_RELATIVE_PATH / "Contents/MacOS/WallpaperVeilRuntime")})
+        report_path = output.with_suffix(".build.json")
+        write_json(report_path, report)
+        print(json.dumps({"app": str(output), "report": str(report_path), "codesign_verified_deep_strict": True,
+                          "type": provenance["type"], "app_launched": False}, indent=2))
+        return report
+    finally:
+        shutil.rmtree(stage_root, ignore_errors=True)
+
+
+def main() -> int:
+    own = Path(__file__).resolve().parent
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--output", type=Path, default=own.parent.parent / "build/Wallpaper Veil.app")
+    parser.add_argument("--runtime", type=Path, required=True,
+                        help="Verified Hammerspoon 1.1.1 runtime input; use ci/fetch_runtime.py to obtain it")
+    args = parser.parse_args()
+    try:
+        build(args.output.expanduser().resolve(), args.runtime.expanduser().resolve(), own)
+    except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as error:
+        print(f"Build failed: {error}", file=sys.stderr)
+        return 1
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

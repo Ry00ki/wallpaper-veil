@@ -1,0 +1,45 @@
+name: Bug report
+description: Report a reproducible problem with Wallpaper Veil.
+title: "Bug: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Describe the behavior and include only the minimum diagnostic detail needed. Remove credentials, personal paths, palette/preferences, display serials or UUIDs, and private logs before posting.
+  - type: input
+    id: version
+    attributes:
+      label: Build or source revision
+      description: App version or source commit, and whether this was a local prototype or a complete engine build.
+    validations:
+      required: true
+  - type: textarea
+    id: environment
+    attributes:
+      label: Environment
+      description: macOS version, Apple Silicon or Intel, relevant display models, and whether another Wallpaper Veil or Hammerspoon veil was running. Do not include display serials or UUIDs.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Steps to reproduce
+      description: Give the shortest sequence that reproduces the problem.
+      placeholder: |
+        1. Open the app
+        2. Choose ...
+        3. Observe ...
+    validations:
+      required: true
+  - type: textarea
+    id: behavior
+    attributes:
+      label: Expected and actual behavior
+      description: State what you expected, what happened, and whether the problem occurs every time.
+    validations:
+      required: true
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Optional supporting evidence
+      description: Minimal redacted error excerpt or screenshot. For brightness problems, say whether the source or follower changed and whether turning sync off restored independent control. Do not attach complete preferences, receipts or private diagnostic files.

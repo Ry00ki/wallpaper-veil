@@ -1,49 +1,91 @@
-# Hammerspoon
-[![CI](https://github.com/Hammerspoon/hammerspoon/workflows/CI/badge.svg)](https://github.com/Hammerspoon/hammerspoon/actions?query=workflow%3ACI)
-[![codecov.io](https://codecov.io/github/Hammerspoon/hammerspoon/coverage.svg?branch=master)](https://codecov.io/github/Hammerspoon/hammerspoon?branch=master)
-[![Downloads current release](https://img.shields.io/github/downloads/Hammerspoon/hammerspoon/latest/total.svg)](https://github.com/Hammerspoon/hammerspoon/releases)
-[![Downloads all releases](https://img.shields.io/github/downloads/Hammerspoon/hammerspoon/total.svg?maxAge=2592000)](https://github.com/Hammerspoon/hammerspoon/releases)
-[![Latest tag](https://img.shields.io/github/tag/Hammerspoon/hammerspoon.svg)](https://github.com/Hammerspoon/hammerspoon/tags)
-[![Latest release](https://img.shields.io/github/release/Hammerspoon/hammerspoon.svg)](https://github.com/Hammerspoon/hammerspoon/releases/latest)
+# Wallpaper Veil
 
-Discord: [Click to join](https://discord.gg/vxchqkRbkR)
+Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
 
-## What is Hammerspoon?
+This repository contains an experimental standalone-app prototype based on Hammerspoon 1.1.1. The current build compiles Wallpaper Veil's launcher and bundles the matching prebuilt Hammerspoon engine with app-owned Lua code. It does not yet rebuild the complete native engine from this source fork.
 
-This is a tool for powerful automation of OS X. At its core, Hammerspoon is just a bridge between the operating system and a Lua scripting engine.
+## Features and status
 
-What gives Hammerspoon its power is a set of extensions that expose specific pieces of system functionality, to the user. With these, you can write Lua scripts to control many aspects of your OS X environment.
+- Adjust tint colour and strength, with saved custom colours.
+- Keep normal wallpaper rotation and desktop interaction.
+- Select a source and follower for hardware-brightness sync.
+- Use optional desktop-widget and clock/Notification Center controls.
+- Access Quit and About Wallpaper Veil from the app's menu.
 
-## How do I install it?
+The prototype is for local evaluation. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. Sleep/wake, login startup and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
 
-### Manually
+## How it runs
 
- * Download the [latest release](https://github.com/Hammerspoon/hammerspoon/releases/latest)
- * Drag `Hammerspoon.app` from your `Downloads` folder to `Applications`
+The app has a small Objective-C launcher and a nested native runtime app. The launcher uses NSWorkspace to start that runtime with controlled app-code and state paths, then exits. It is not a permanent background supervisor.
 
-### Homebrew
+Executable code and native modules live inside the completed app bundle. Writable state lives in `~/Library/Application Support/Wallpaper Veil`, with an independent macOS preferences domain. Once built, the app does not need the source checkout, Python or a separately installed Hammerspoon to run.
 
-  * `brew install hammerspoon --cask`
+On first normal launch, it can import existing `wallpaperVeil.*` preferences from Hammerspoon into its own domain. It does not replace the original Hammerspoon configuration. Upstream update checks, crash uploads and AppleScript support are disabled in this prototype. Login registration is not implemented by the prototype.
 
-## What next?
+Relevant source:
 
-Out of the box, Hammerspoon does nothing - you will need to create `~/.hammerspoon/init.lua` and fill it with useful code. There are several resources which can help you:
- * [Getting Started Guide](https://www.hammerspoon.org/go/)
- * [API docs](https://www.hammerspoon.org/docs/)
- * [FAQ](https://www.hammerspoon.org/faq/)
- * [Sample Configurations](https://github.com/Hammerspoon/hammerspoon/wiki/Sample-Configurations) supplied by various users
- * [Contribution Guide](https://github.com/Hammerspoon/hammerspoon/blob/master/CONTRIBUTING.md) for developers looking to get involved
- * An IRC channel for general chat/support/development (#hammerspoon on Libera)
- * [Google Group](https://groups.google.com/forum/#!forum/hammerspoon/) for support
+- [Launcher](WallpaperVeil/launcher.m)
+- [Local builder](WallpaperVeil/build_local.py)
+- [Application Lua](WallpaperVeil/app)
+- [Local handoff helper](WallpaperVeil/handoff.py)
 
-## What is the history of the project?
+## Build a local prototype
 
-Hammerspoon is a fork of [Mjolnir](https://github.com/mjolnirapp/mjolnir). Mjolnir aims to be a very minimal application, with its extensions hosted externally and managed using a Lua package manager. We wanted to provide a more integrated experience.
+Requirements:
 
-## What is the future of the project?
+- macOS with Xcode Command Line Tools, Clang and the macOS SDK.
+- Python 3.10 or later and Git.
+- A checkout retaining the upstream `1.1.1` tag and its history.
+- An official Hammerspoon **1.1.1, build 6936** app bundle as the engine input.
 
-Our intentions for Hammerspoon broadly fall into these categories:
- * Ever wider coverage of system APIs in Extensions
- * Tighter integration between extensions
- * Smoother user experience
+The build validates that the upstream tag resolves to commit `1469832361b4c3687ec7d589c1b4efe4d3b742ee`. It rejects a different engine version. Obtain the matching engine from [Hammerspoon's official release](https://github.com/Hammerspoon/hammerspoon/releases/tag/1.1.1); it is a build input, not an installed runtime dependency of the finished app.
 
+The default local checkout is `~/Developer/Wallpaper Veil/wallpaper-veil`. The build command is portable and can be run from the repository root at another location:
+
+```sh
+git fetch --no-tags https://github.com/Hammerspoon/hammerspoon.git refs/tags/1.1.1:refs/tags/1.1.1
+python3 WallpaperVeil/ci/fetch_runtime.py --destination "$TMPDIR/wallpaper-veil-runtime"
+python3 WallpaperVeil/build_local.py \
+  --runtime "$TMPDIR/wallpaper-veil-runtime/Hammerspoon.app" \
+  --output "$PWD/build/Wallpaper Veil.app"
+```
+
+Supply `--runtime` explicitly. It can point to the matching bundle elsewhere; the repository's pinned runtime-fetch helper is `WallpaperVeil/ci/fetch_runtime.py`. Check that helper's options before choosing a download location. The builder compiles the launcher, packages the engine and Lua, retains acknowledgements, signs the bundle ad hoc and verifies its signature. It does not launch the app or change the source engine installation.
+
+**Ad hoc signed** means locally signed without a Developer ID identity. This build is not notarized and is not a distribution-ready release.
+
+A complete engine rebuild is a separate workflow requiring the upstream Xcode workspace and dependencies. See [the preserved upstream README](UPSTREAM_README.md) and [upstream contribution guidance](https://github.com/Hammerspoon/hammerspoon/blob/master/CONTRIBUTING.md).
+
+## Launch and check
+
+Close any other Wallpaper Veil copy before verification:
+
+```sh
+open "$PWD/build/Wallpaper Veil.app" --args --verify-only
+```
+
+Verification-only checks identity, isolated settings/code paths and application Lua syntax, then exits. It does not run the hardware-brightness acceptance sequence.
+
+Before normal launch, stop an existing Hammerspoon-based veil to avoid duplicate overlays. Then open the built app:
+
+```sh
+open "$PWD/build/Wallpaper Veil.app"
+```
+
+Use its menu-bar item to adjust the tint or quit. About Wallpaper Veil is the final menu item. macOS Accessibility approval is needed for the optional widget/clock automation; tint controls do not require that approval.
+
+The current `handoff.py` is a local development helper with fixed default development and installation paths. Inspect its constants and recovery behavior before using it on another setup. Its handoff/self-test modes may stop a matching legacy process and make small temporary hardware-brightness changes. They are active acceptance tests, not passive diagnostics. Prefer a verified previous Wallpaper Veil bundle for recovery. Restoring an older Hammerspoon setup requires that app to be present and validated first; do not assume it remains installed. A single successful run does not establish reliability across displays or macOS versions.
+
+## Repository checks and private builds
+
+Source checks parse the app Lua and compile Python on every push and pull request. The **Wallpaper Veil private preview** workflow builds a ZIP only when manually dispatched in a private repository. Its artifact includes a SHA256 checksum and verifies the extracted app signature; it does not launch the app or exercise hardware. See [CI details](WallpaperVeil/ci/README.md).
+
+## Contributing and reporting problems
+
+See [CONTRIBUTING.md](CONTRIBUTING.md) and [CHANGELOG.md](CHANGELOG.md). Include reproducible steps and a minimal, redacted error excerpt when reporting a problem. Do not upload personal preferences, diagnostic receipts, display identifiers or complete private logs.
+
+## Credits and licence
+
+Wallpaper Veil builds on [Hammerspoon](https://github.com/Hammerspoon/hammerspoon), LuaSkin, Lua and the contributors to Hammerspoon and its dependencies. The source fork begins at Hammerspoon 1.1.1.
+
+The repository's [MIT licence](LICENSE) and retained copyright notices apply as stated there. Bundled third-party components retain their own licences and acknowledgements. Preserve them when modifying or distributing a build; see [CREDITS.md](CREDITS.md) and the built runtime's `Contents/Resources/Acknowledgements`.

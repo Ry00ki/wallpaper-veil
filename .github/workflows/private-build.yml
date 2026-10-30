@@ -1,0 +1,54 @@
+name: Wallpaper Veil private preview
+
+# This expensive macOS job runs only when explicitly dispatched. It does not
+# publish a release, launch the app, or test real display/desktop behaviour.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wallpaper-veil-private-preview
+  cancel-in-progress: false
+
+jobs:
+  private-preview:
+    name: Build private preview
+    if: github.event.repository.private == true
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Check out source and history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
+        with:
+          python-version: '3.12'
+      - name: Obtain and verify pinned upstream source tag
+        run: |
+          git fetch --no-tags https://github.com/Hammerspoon/hammerspoon.git refs/tags/1.1.1:refs/tags/1.1.1
+          test "$(git rev-parse '1.1.1^{commit}')" = '1469832361b4c3687ec7d589c1b4efe4d3b742ee'
+      - name: Download and verify pinned native runtime
+        run: python WallpaperVeil/ci/fetch_runtime.py --destination "$RUNNER_TEMP/wallpaper-veil-runtime"
+      - name: Compile launcher and package native runtime
+        run: |
+          python WallpaperVeil/build_local.py \
+            --runtime "$RUNNER_TEMP/wallpaper-veil-runtime/Hammerspoon.app" \
+            --output "$RUNNER_TEMP/wallpaper-veil-build/Wallpaper Veil.app"
+      - name: Package preview and verify extracted signatures
+        run: |
+          python WallpaperVeil/ci/package_preview.py \
+            --app "$RUNNER_TEMP/wallpaper-veil-build/Wallpaper Veil.app" \
+            --destination "$RUNNER_TEMP/wallpaper-veil-artifacts"
+      - name: Upload private preview artifacts
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wallpaper-veil-private-preview-${{ github.sha }}
+          path: ${{ runner.temp }}/wallpaper-veil-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
+          compression-level: 0
