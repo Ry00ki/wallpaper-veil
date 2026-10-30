@@ -18,9 +18,9 @@ It must not contain user preferences, local receipts, private paths, credentials
 or diagnostic logs. The workflow has read-only repository access; checkout does
 not persist credentials.
 
-This is a binary-runtime prototype: the launcher and native UI bridge are compiled
-from source, while the upstream native engine is prebuilt. Preview bundles are ad
-hoc signed without Developer ID signing or notarization. Signing and ZIP checks do
+The existing preview workflow uses the pinned official binary runtime. The launcher
+and native UI bridge are compiled from source. An optional verified source-engine
+input is supported by the local builder below. Preview bundles are ad hoc signed without Developer ID signing or notarization. Signing and ZIP checks do
 not verify menu appearance, real display brightness, Accessibility permissions,
 Spaces, sleep or wake. Those require local testing.
 
@@ -31,3 +31,60 @@ Actions are pinned to the commit IDs behind official release tags, verified on
 2026-10-30: checkout v7.0.1, setup-python v7.1.0 and upload-artifact v7.0.2.
 When updating an action or runtime, verify the corresponding official metadata
 and update the pin deliberately.
+
+
+## Source-engine developer builds
+
+The separate `Wallpaper Veil source engine build` workflow is manual only. It
+compiles native source pinned to upstream 1.1.1 rather than downloading the engine
+release binary. Its shared recipe is `WallpaperVeil/ci/build_source_engine.py`.
+It uses the upstream Release scheme with Debug configuration, both Intel and
+Apple Silicon architectures, and full Xcode on the standard public macOS runner.
+It needs no Apple signing credentials, telemetry token, notarization or pod
+installation. It retains 81 component notices, signs ad hoc, rejects sanitizer
+runtime dependencies, and verifies the archive after extraction. This engine
+artifact is an intermediate dependency and is never launched by the workflow.
+The existing preview packaging workflow remains unchanged.
+
+The successful baseline recipe was qualified in
+[run 41007648485](https://github.com/Ry00ki/wallpaper-veil/actions/runs/41007648485).
+The shared-script refactor still needs its own manual CI run before qualification.
+This recipe intentionally pins native source to commit
+`1469832361b4c3687ec7d589c1b4efe4d3b742ee`; it does not compile subsequent native
+source edits. Changes to native source require a new audited recipe and engine.
+
+Keep an extracted engine and its original ZIP/manifest together under
+`build.noindex/source-engine`. After obtaining a source-engine artifact, extract
+its outer artifact ZIP there and extract `wallpaper-veil-source-engine.zip` into
+`build.noindex/source-engine/runtime` with `ditto --noqtn -x -k`. Then:
+
+```sh
+python3 WallpaperVeil/build_local.py \
+  --runtime "../build.noindex/source-engine/runtime/Hammerspoon.app" \
+  --source-engine-manifest "../build.noindex/source-engine/source-engine-manifest.json" \
+  --source-engine-archive "../build.noindex/source-engine/wallpaper-veil-source-engine.zip" \
+  --output "../build.noindex/source-candidate/Wallpaper Veil.app"
+python3 WallpaperVeil/ci/package_preview.py \
+  --app "../build.noindex/source-candidate/Wallpaper Veil.app" \
+  --destination "../build.noindex/source-candidate-artifacts"
+```
+
+Both source flags are required. The builder verifies every original archive file/directory/symlink,
+rejects duplicate/unsafe ZIP paths or extra/missing bundle entries, and checks
+engine and bootstrap hashes, all 95 native components and both architectures,
+unchanged native source, and the original deep signature before packaging. It
+preserves the input manifest and marks source-built engine provenance separately
+from the current Wallpaper Veil source HEAD. Packaging checks the report against
+signed bundle provenance and emits `wallpaper-veil-source-engine.json` instead
+of the official binary pin. Without source flags, an engine must match the
+pinned official executable/bootstrap hashes; an ad hoc source build cannot be
+silently described as the official runtime.
+
+Edit `WallpaperVeil/version.json` once to set the product version, positive build
+number, release tag and channel. The builder validates their consistency and
+uses them for both bundles and signed provenance; packaging rejects mismatches.
+Source-engine candidates remain unreleased until qualification. Static input/signature and packaging checks
+do not qualify application startup, menu behavior, real brightness, login,
+permissions or display lifecycle. Repeat local application acceptance and UI
+checks before installation or release. Do not upload a developer's local build
+log; the permanent workflow's retained log comes from its public CI runner.

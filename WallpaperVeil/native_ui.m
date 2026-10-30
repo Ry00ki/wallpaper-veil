@@ -4,6 +4,7 @@
 #import <ServiceManagement/ServiceManagement.h>
 #include "lua.h"
 #include "lauxlib.h"
+#import "update_check.h"
 
 // App-owned UI only. Never alter NSWindowController or another application's UI.
 static NSString * const WVName = @"Wallpaper Veil";
@@ -12,8 +13,23 @@ static BOOL WVConfigured = NO;
 static BOOL WVPreferencesSuppressed = NO;
 static BOOL WVConsoleSuppressed = NO;
 
-@interface WVUIController : NSObject <NSWindowDelegate>
+@interface WVUIController : NSObject <NSWindowDelegate, NSURLSessionTaskDelegate>
 @property(nonatomic, strong) NSWindow *aboutWindow;
+@property(nonatomic, strong) NSButton *updateButton;
+@property(nonatomic, strong) NSButton *releaseButton;
+@property(nonatomic, strong) NSTextField *updateLabel;
+@property(nonatomic, strong) NSProgressIndicator *updateProgress;
+@property(nonatomic, strong) NSURLSession *updateSession;
+@property(nonatomic, strong) NSURLSessionDataTask *updateTask;
+@property(nonatomic, strong) NSTimer *updateDeadline;
+@property(nonatomic, strong) NSMutableArray *releasePages;
+@property(nonatomic, copy) NSDictionary *updateResult;
+@property(nonatomic) NSUInteger updateGeneration;
+- (void)checkForUpdates:(id)sender;
+- (void)cancelUpdateCheck;
+- (void)openRelease:(id)sender;
+- (void)finishUpdate:(NSDictionary *)result;
+- (void)fetchReleasePage:(NSUInteger)page generation:(NSUInteger)generation;
 - (void)showAbout:(id)sender;
 - (void)openRepository:(id)sender;
 - (void)openNotices:(id)sender;
@@ -47,7 +63,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
 @implementation WVUIController
 - (void)makeAbout {
     if (self.aboutWindow) return;
-    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 500, 370)
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 520, 550)
         styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
         backing:NSBackingStoreBuffered defer:NO];
     window.title = WVName;
@@ -55,18 +71,26 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     window.delegate = self;
     window.tabbingMode = NSWindowTabbingModeDisallowed;
     NSView *content = window.contentView;
-    NSImageView *icon = [[NSImageView alloc] initWithFrame:NSMakeRect(202, 252, 96, 96)];
+    NSImageView *icon = [[NSImageView alloc] initWithFrame:NSMakeRect(212, 430, 96, 96)];
     icon.image = WVIcon();
     icon.imageScaling = NSImageScaleProportionallyUpOrDown;
     [content addSubview:icon];
-    [content addSubview:WVLabel(WVName, NSMakeRect(30, 211, 440, 32), 25, NSFontWeightSemibold)];
-    NSString *version = NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"0.1.0";
-    NSTextField *versionLabel = WVLabel([@"Version " stringByAppendingString:version],
-        NSMakeRect(30, 186, 440, 20), 13, NSFontWeightRegular);
+    [content addSubview:WVLabel(WVName, NSMakeRect(30, 390, 460, 32), 25, NSFontWeightSemibold)];
+    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+    NSString *version = info[@"CFBundleShortVersionString"] ?: @"Unknown";
+    NSString *build = info[@"CFBundleVersion"] ?: @"Unknown";
+    NSTextField *versionLabel = WVLabel([NSString stringWithFormat:@"Version %@ (build %@)", version, build],
+        NSMakeRect(30, 365, 460, 20), 13, NSFontWeightRegular);
     versionLabel.textColor = NSColor.secondaryLabelColor;
     [content addSubview:versionLabel];
-    NSTextField *detail = WVLabel(@"Standalone preview\nMIT licence. Open-source credits and additional notices\nare included with the app.",
-        NSMakeRect(30, 115, 440, 58), 12, NSFontWeightRegular);
+    NSString *channel = info[@"WVReleaseChannel"] ?: @"Unknown";
+    NSString *tag = info[@"WVReleaseTag"] ?: @"Unversioned build";
+    NSTextField *releaseLabel = WVLabel([NSString stringWithFormat:@"%@ · %@", channel.capitalizedString, tag],
+        NSMakeRect(30, 341, 460, 20), 12, NSFontWeightRegular);
+    releaseLabel.textColor = NSColor.secondaryLabelColor;
+    [content addSubview:releaseLabel];
+    NSTextField *detail = WVLabel(@"Standalone macOS app\nMIT licence. Open-source credits and additional notices\nare included with the app.",
+        NSMakeRect(30, 276, 460, 58), 12, NSFontWeightRegular);
     detail.maximumNumberOfLines = 3;
     detail.cell.usesSingleLineMode = NO;
     detail.cell.wraps = YES;
@@ -74,17 +98,141 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     detail.lineBreakMode = NSLineBreakByWordWrapping;
     detail.textColor = NSColor.secondaryLabelColor;
     [content addSubview:detail];
+    self.updateButton = [NSButton buttonWithTitle:@"Check for Updates" target:self action:@selector(checkForUpdates:)];
+    self.updateButton.frame = NSMakeRect(160, 236, 200, 32);
+    self.updateButton.bezelStyle = NSBezelStyleRounded;
+    [content addSubview:self.updateButton];
+    self.updateProgress = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(373, 245, 16, 16)];
+    self.updateProgress.style = NSProgressIndicatorStyleSpinning;
+    self.updateProgress.displayedWhenStopped = NO;
+    [content addSubview:self.updateProgress];
+    self.updateLabel = WVLabel(@"Check GitHub for a newer release.\nNo automatic downloads or installation.",
+        NSMakeRect(30, 170, 460, 58), 12, NSFontWeightRegular);
+    self.updateLabel.maximumNumberOfLines = 3;
+    self.updateLabel.cell.usesSingleLineMode = NO;
+    self.updateLabel.cell.wraps = YES;
+    self.updateLabel.cell.scrollable = NO;
+    self.updateLabel.lineBreakMode = NSLineBreakByWordWrapping;
+    self.updateLabel.textColor = NSColor.secondaryLabelColor;
+    [content addSubview:self.updateLabel];
+    self.releaseButton = [NSButton buttonWithTitle:@"View Release on GitHub" target:self action:@selector(openRelease:)];
+    self.releaseButton.frame = NSMakeRect(140, 132, 240, 32);
+    self.releaseButton.bezelStyle = NSBezelStyleRounded;
+    self.releaseButton.hidden = YES;
+    [content addSubview:self.releaseButton];
     NSButton *repository = [NSButton buttonWithTitle:@"Open GitHub Repository"
         target:self action:@selector(openRepository:)];
-    repository.frame = NSMakeRect(130, 67, 240, 32);
+    repository.frame = NSMakeRect(140, 87, 240, 32);
     repository.bezelStyle = NSBezelStyleRounded;
     [content addSubview:repository];
     NSButton *notices = [NSButton buttonWithTitle:@"Third-Party Notices"
         target:self action:@selector(openNotices:)];
-    notices.frame = NSMakeRect(145, 25, 210, 32);
+    notices.frame = NSMakeRect(155, 45, 210, 32);
     notices.bezelStyle = NSBezelStyleRounded;
     [content addSubview:notices];
+    NSTextField *manual = WVLabel(@"Updates are checked only when you click. Installation stays manual.",
+        NSMakeRect(20, 14, 480, 18), 10.5, NSFontWeightRegular);
+    manual.textColor = NSColor.secondaryLabelColor;
+    [content addSubview:manual];
+    self.updateResult = @{@"state": @"idle"};
     self.aboutWindow = window;
+}
+- (void)finishUpdate:(NSDictionary *)result {
+    // Every terminal path invalidates queued callbacks and the whole-check clock.
+    self.updateGeneration++;
+    [self.updateDeadline invalidate];
+    self.updateDeadline = nil;
+    [self.updateTask cancel];
+    [self.updateSession invalidateAndCancel];
+    self.updateResult = result;
+    self.updateLabel.stringValue = result[@"message"] ?: @"";
+    self.updateButton.enabled = YES;
+    self.updateButton.title = @"Check Again";
+    [self.updateProgress stopAnimation:nil];
+    self.releaseButton.hidden = ![result[@"latestURL"] length];
+    self.updateSession = nil;
+    self.updateTask = nil;
+    self.releasePages = nil;
+}
+- (void)cancelUpdateCheck {
+    if (!self.updateTask && !self.updateDeadline) return;
+    [self finishUpdate:@{@"state": @"cancelled",
+        @"message": @"Update check canceled. Click Check Again to retry."}];
+}
+- (void)checkForUpdates:(id)sender {
+    (void)sender;
+    [self makeAbout];
+    if (self.updateTask) return;
+    self.updateGeneration++;
+    self.releasePages = [NSMutableArray array];
+    self.updateResult = @{@"state": @"checking"};
+    self.updateLabel.stringValue = @"Checking published GitHub releases…";
+    self.releaseButton.hidden = YES;
+    self.updateButton.enabled = NO;
+    [self.updateProgress startAnimation:nil];
+    NSURLSessionConfiguration *configuration = NSURLSessionConfiguration.ephemeralSessionConfiguration;
+    configuration.URLCache = nil;
+    configuration.HTTPCookieStorage = nil;
+    configuration.HTTPShouldSetCookies = NO;
+    configuration.URLCredentialStorage = nil;
+    configuration.requestCachePolicy = NSURLRequestReloadIgnoringLocalCacheData;
+    configuration.timeoutIntervalForRequest = 15;
+    configuration.timeoutIntervalForResource = 45;
+    self.updateSession = [NSURLSession sessionWithConfiguration:configuration delegate:self delegateQueue:NSOperationQueue.mainQueue];
+    NSUInteger generation = self.updateGeneration;
+    self.updateDeadline = [NSTimer timerWithTimeInterval:45 repeats:NO block:^(NSTimer *timer) {
+        (void)timer;
+        if (generation != self.updateGeneration) return;
+        [self finishUpdate:WVUpdateError(@"The update check timed out after 45 seconds. Check your connection and try again.")];
+    }];
+    [NSRunLoop.mainRunLoop addTimer:self.updateDeadline forMode:NSRunLoopCommonModes];
+    [self fetchReleasePage:1 generation:generation];
+}
+- (void)fetchReleasePage:(NSUInteger)page generation:(NSUInteger)generation {
+    // Never follow a server-supplied pagination URL or an asset download URL.
+    NSURL *url = [NSURL URLWithString:[NSString stringWithFormat:@"https://api.github.com/repos/Ry00ki/wallpaper-veil/releases?per_page=100&page=%lu", (unsigned long)page]];
+    NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
+    [request setValue:@"application/vnd.github+json" forHTTPHeaderField:@"Accept"];
+    [request setValue:@"2026-03-10" forHTTPHeaderField:@"X-GitHub-Api-Version"];
+    [request setValue:@"Wallpaper-Veil-Manual-Update-Check" forHTTPHeaderField:@"User-Agent"];
+    self.updateTask = [self.updateSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
+        dispatch_async(dispatch_get_main_queue(), ^{
+            if (generation != self.updateGeneration) return;
+            NSHTTPURLResponse *http = [response isKindOfClass:NSHTTPURLResponse.class] ? (NSHTTPURLResponse *)response : nil;
+            NSDictionary *result = WVReleaseResponse(data, http.statusCode, http.allHeaderFields, error);
+            if (result[@"state"]) { [self finishUpdate:result]; return; }
+            NSArray *releases = result[@"releases"];
+            [self.releasePages addObjectsFromArray:releases];
+            if (WVReleasePageHasNext(http.allHeaderFields, releases.count)) {
+                if (page >= 10) {
+                    [self finishUpdate:WVUpdateError(@"There are more releases than this check can examine. Visit the repository's Releases page; no up-to-date result can be confirmed.")];
+                    return;
+                }
+                self.updateLabel.stringValue = @"Checking more published GitHub releases…";
+                [self fetchReleasePage:page + 1 generation:generation];
+                return;
+            }
+            NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+            [self finishUpdate:WVEvaluateReleases(self.releasePages, info[@"WVReleaseTag"], info[@"WVReleaseChannel"])];
+        });
+    }];
+    [self.updateTask resume];
+}
+- (void)URLSession:(NSURLSession *)session task:(NSURLSessionTask *)task
+    willPerformHTTPRedirection:(NSHTTPURLResponse *)response newRequest:(NSURLRequest *)request
+    completionHandler:(void (^)(NSURLRequest *))completionHandler {
+    (void)session; (void)task; (void)response; (void)request;
+    // A repository relocation or redirect needs a reviewed source change.
+    completionHandler(nil);
+}
+- (void)openRelease:(id)sender {
+    (void)sender;
+    NSString *tag = self.updateResult[@"latestTag"];
+    NSString *url = WVTrustedReleaseURL(tag);
+    if (!url || ![url isEqualToString:self.updateResult[@"latestURL"]]) return;
+    if (![NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:url]]) {
+        self.updateLabel.stringValue = @"The release page could not be opened in your default browser. Try again or open the repository's Releases page.";
+    }
 }
 - (void)showAbout:(id)sender {
     (void)sender;
@@ -287,7 +435,7 @@ static int WVDiagnostics(lua_State *L) {
         }
         NSMutableArray<NSString *> *aboutText = [NSMutableArray array];
         NSMutableArray<NSString *> *aboutButtons = [NSMutableArray array];
-        BOOL repositoryWired = NO, noticesWired = NO, iconPresent = NO;
+        BOOL repositoryWired = NO, noticesWired = NO, updateWired = NO, releaseWired = NO, iconPresent = NO;
         for (NSView *view in WVController.aboutWindow.contentView.subviews) {
             if ([view isKindOfClass:NSTextField.class]) {
                 [aboutText addObject:((NSTextField *)view).stringValue ?: @""];
@@ -298,6 +446,10 @@ static int WVDiagnostics(lua_State *L) {
                     repositoryWired = button.target == WVController && button.action == @selector(openRepository:);
                 if ([button.title isEqualToString:@"Third-Party Notices"])
                     noticesWired = button.target == WVController && button.action == @selector(openNotices:);
+                if (button == WVController.updateButton)
+                    updateWired = button.target == WVController && button.action == @selector(checkForUpdates:);
+                if (button == WVController.releaseButton)
+                    releaseWired = button.target == WVController && button.action == @selector(openRelease:);
             } else if ([view isKindOfClass:NSImageView.class]) {
                 iconPresent = ((NSImageView *)view).image != nil;
             }
@@ -310,15 +462,29 @@ static int WVDiagnostics(lua_State *L) {
             @"aboutTitle": WVController.aboutWindow.title ?: @"", @"menuItems": menuItems,
             @"aboutText": aboutText, @"aboutButtons": aboutButtons, @"repositoryURL": WVRepository,
             @"repositoryActionWired": @(repositoryWired), @"noticesActionWired": @(noticesWired),
-            @"aboutIconPresent": @(iconPresent)};
+            @"aboutIconPresent": @(iconPresent), @"updateActionWired": @(updateWired),
+            @"releaseActionWired": @(releaseWired), @"updateInProgress": @(WVController.updateTask != nil),
+            @"updateDeadlineActive": @(WVController.updateDeadline.isValid),
+            @"currentReleaseTag": NSBundle.mainBundle.infoDictionary[@"WVReleaseTag"] ?: @"",
+            @"releaseChannel": NSBundle.mainBundle.infoDictionary[@"WVReleaseChannel"] ?: @"",
+            @"currentVersion": NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"",
+            @"currentBuild": NSBundle.mainBundle.infoDictionary[@"CFBundleVersion"] ?: @"",
+            @"updateState": WVController.updateResult[@"state"] ?: @"idle",
+            @"updateMessage": WVController.updateLabel.stringValue ?: @"",
+            @"latestTag": WVController.updateResult[@"latestTag"] ?: @"",
+            @"latestURL": WVController.updateResult[@"latestURL"] ?: @""};
     });
     lua_newtable(L);
     for (NSString *key in @[@"configured", @"preferencesSuppressed", @"consoleSuppressed",
         @"engineWindowsVisible", @"nativeMainMenuReady", @"aboutWindowCreated", @"aboutVisible",
-        @"repositoryActionWired", @"noticesActionWired", @"aboutIconPresent"])
+        @"repositoryActionWired", @"noticesActionWired", @"aboutIconPresent",
+        @"updateActionWired", @"releaseActionWired", @"updateInProgress", @"updateDeadlineActive"])
         WVSetBoolean(L, key.UTF8String, [values[key] boolValue]);
     WVSetString(L, "aboutTitle", values[@"aboutTitle"]);
     WVSetString(L, "repositoryURL", values[@"repositoryURL"]);
+    for (NSString *key in @[@"currentReleaseTag", @"releaseChannel", @"currentVersion", @"currentBuild",
+        @"updateState", @"updateMessage", @"latestTag", @"latestURL"])
+        WVSetString(L, key.UTF8String, values[key]);
     for (NSString *key in @[@"menuItems", @"aboutText", @"aboutButtons"]) {
         lua_newtable(L);
         NSInteger index = 1;
@@ -339,6 +505,34 @@ static int WVShowAbout(lua_State *L) {
         [WVController showAbout:nil];
     });
     lua_pushboolean(L, YES); return 1;
+}
+static int WVCheckForUpdates(lua_State *L) {
+    WVOnMain(^{
+        if (!WVController) WVConfigureOnMain();
+        [WVController showAbout:nil];
+        [WVController checkForUpdates:nil];
+    });
+    lua_pushboolean(L, YES); return 1;
+}
+static int WVCancelUpdateCheck(lua_State *L) {
+    WVOnMain(^{ [WVController cancelUpdateCheck]; });
+    return WVDiagnostics(L);
+}
+// Test mode can render deterministic results without any network or browser action.
+static int WVTestUpdateResponse(lua_State *L) {
+    if (strcmp(getenv("WV_UI_TEST") ?: "", "1") != 0) return luaL_error(L, "Update fixtures require WV_UI_TEST=1");
+    size_t length;
+    const char *json = luaL_checklstring(L, 1, &length);
+    NSData *data = [NSData dataWithBytes:json length:length];
+    NSInteger status = luaL_optinteger(L, 2, 200);
+    __block NSDictionary *result = WVReleaseResponse(data, status, status == 403 ? @{@"X-RateLimit-Remaining": @"0"} : @{}, nil);
+    WVOnMain(^{
+        if (!WVController) WVConfigureOnMain();
+        [WVController makeAbout];
+        if (result[@"releases"]) result = WVEvaluateReleases(result[@"releases"], NSBundle.mainBundle.infoDictionary[@"WVReleaseTag"], NSBundle.mainBundle.infoDictionary[@"WVReleaseChannel"]);
+        [WVController finishUpdate:result];
+    });
+    return WVDiagnostics(L);
 }
 static int WVCloseAbout(lua_State *L) {
     WVOnMain(^{ [WVController.aboutWindow orderOut:nil]; });
@@ -368,6 +562,8 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
     static const luaL_Reg functions[] = {
         {"configure", WVConfigure}, {"showAbout", WVShowAbout},
         {"diagnostics", WVDiagnostics}, {"closeAbout", WVCloseAbout},
+        {"checkForUpdates", WVCheckForUpdates}, {"cancelUpdateCheck", WVCancelUpdateCheck},
+        {"testUpdateResponse", WVTestUpdateResponse},
         {"saveAboutPreview", WVSaveAboutPreview},
         {"loginStatus", WVLoginStatus}, {"setLaunchAtLogin", WVSetLaunchAtLogin},
         {"openLoginSettings", WVOpenLoginSettings}, {NULL, NULL}

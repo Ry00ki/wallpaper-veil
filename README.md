@@ -5,7 +5,7 @@
 
 Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
 
-Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Contributions, bug reports and feature requests are welcome. The current build compiles Wallpaper Veil's launcher and native UI bridge, and bundles the matching prebuilt Hammerspoon engine with app-owned Lua code. It does not yet rebuild the complete native engine from this source fork.
+Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Contributions, bug reports and feature requests are welcome. The product builder compiles Wallpaper Veil's launcher and native UI bridge, and accepts either the pinned official engine or a verified engine compiled from the audited source baseline. The manual source-engine build and product packaging retain separate provenance.
 
 ## Features and status
 
@@ -14,8 +14,17 @@ Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Con
 - Select a source and follower for hardware-brightness sync.
 - Use optional desktop-widget and clock/Notification Center controls.
 - Access Quit and About Wallpaper Veil from the app's menu.
+- Check the installed version against GitHub releases and open a newer release for manual updating.
 
 The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. A local two-display test passed brightness synchronization, independent adjustment and restoration. Actual launch at login was verified after reboot on macOS 27.0.1. Sleep/wake and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
+
+## Download and update
+
+Download `wallpaper-veil-preview.zip` from [Releases](https://github.com/Ry00ki/wallpaper-veil/releases). Expand it and keep one installed `Wallpaper Veil.app` in your Applications folder. Quit the running app before replacing it, and retain the previous release ZIP for recovery. These experimental previews are ad hoc signed and not notarized.
+
+About Wallpaper Veil shows the version, build and release channel. **Check for Updates** runs when clicked, compares published GitHub versions and offers a link to the newer release. Preview builds can see preview and stable releases; stable builds see stable releases. You download and replace the app yourself.
+
+For release notifications, choose **Watch → Custom → Releases** on GitHub. See [GitHub notification settings](https://docs.github.com/en/subscriptions-and-notifications/get-started/configuring-notifications).
 
 ## How it runs
 
@@ -39,9 +48,10 @@ Requirements:
 - macOS with Xcode Command Line Tools, Clang and the macOS SDK.
 - Python 3.10 or later and Git.
 - A checkout retaining the upstream `1.1.1` tag and its history.
-- An official Hammerspoon **1.1.1, build 6936** app bundle as the engine input.
+- The pinned official Hammerspoon **1.1.1, build 6936** engine, or its verified source-engine archive and manifest.
+- A full Xcode installation is needed to compile the source engine; the manual GitHub Actions workflow provides that environment.
 
-The build validates that the upstream tag resolves to commit `1469832361b4c3687ec7d589c1b4efe4d3b742ee`. It rejects a different engine version. Obtain the matching engine from [Hammerspoon's official release](https://github.com/Hammerspoon/hammerspoon/releases/tag/1.1.1); it is a build input, not an installed runtime dependency of the finished app.
+The builder validates that the upstream tag resolves to commit `1469832361b4c3687ec7d589c1b4efe4d3b742ee`. It rejects a different engine version. Obtain the matching engine from [Hammerspoon's official release](https://github.com/Hammerspoon/hammerspoon/releases/tag/1.1.1); it is a build input, not an installed runtime dependency of the finished app.
 
 The default local checkout is `~/Developer/Wallpaper Veil/wallpaper-veil`. The build command is portable and can be run from the repository root at another location:
 
@@ -57,7 +67,7 @@ Supply `--runtime` explicitly. It can point to the matching bundle elsewhere; th
 
 **Ad hoc signed** means locally signed without a Developer ID identity. This build is not notarized and is not a distribution-ready release.
 
-A complete engine rebuild is a separate workflow requiring the upstream Xcode workspace and dependencies. See [the preserved upstream README](UPSTREAM_README.md) and [upstream contribution guidance](https://github.com/Hammerspoon/hammerspoon/blob/master/CONTRIBUTING.md).
+The separate [source-engine build workflow](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/source-engine-build.yml) compiles the pinned native baseline with full Xcode. [CI instructions](WallpaperVeil/ci/README.md) describe its manifest/archive inputs and product packaging. See [the preserved upstream README](UPSTREAM_README.md) and [upstream contribution guidance](https://github.com/Hammerspoon/hammerspoon/blob/master/CONTRIBUTING.md).
 
 ## Install one canonical app
 

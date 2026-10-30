@@ -11,5 +11,7 @@
   "download_url": "https://github.com/Hammerspoon/hammerspoon/releases/download/1.1.1/Hammerspoon-1.1.1.zip",
   "metadata_url": "https://api.github.com/repos/Hammerspoon/hammerspoon/releases/tags/1.1.1",
   "verified_metadata_date": "2026-10-30",
-  "digest_source": "Official GitHub release asset metadata, digest field"
+  "digest_source": "Official GitHub release asset metadata, digest field",
+  "engine_sha256": "35ddf568c624246683b217c8df0061c99feea4afc1a65444c175c88e1c155b17",
+  "setup_sha256": "39879a3808d7fefce6ff631bde484920007ed25c60034df4dd6594e332c60063"
 }

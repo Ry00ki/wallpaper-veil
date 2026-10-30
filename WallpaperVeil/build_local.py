@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Build a Wallpaper Veil prototype using an existing native runtime.
 
-Only the small launcher is compiled. The Hammerspoon engine is NOT rebuilt
-from the local source fork. This script never launches an app, writes application
+The launcher and UI bridge are compiled locally. The native engine is copied
+from either the pinned official release or a verified source-engine build. This script never launches an app, writes application
 preferences, changes login items, or modifies the source runtime installation.
 """
 from __future__ import annotations
@@ -15,11 +15,14 @@ import os
 from pathlib import Path
 import platform
 import plistlib
+import re
 import shutil
 import subprocess
 import sys
 import tempfile
 import uuid
+
+from runtime_provenance import verify_runtime
 
 APP_ID = "com.ry00ki.wallpaperveil"
 LAUNCHER_ID = "com.ry00ki.wallpaperveil.launcher"
@@ -61,6 +64,30 @@ def checked_source(project: Path) -> dict:
             "worktree_status": run("/usr/bin/git", "-C", str(project), "status", "--porcelain", capture=True).splitlines()}
 
 
+def release_metadata(own: Path) -> dict:
+    """Read the single release edit point and reject inconsistent metadata."""
+    value = json.loads((own / "version.json").read_text())
+    keys = {"version", "build", "release_tag", "release_channel"}
+    if not isinstance(value, dict) or set(value) != keys or not all(isinstance(v, str) for v in value.values()):
+        raise RuntimeError("version.json must contain exactly four string release fields")
+    integer = r"(?:0|[1-9][0-9]*)"
+    if not re.fullmatch(integer + r"\." + integer + r"\." + integer, value["version"]):
+        raise RuntimeError("Release version must contain three canonical numeric components")
+    if not re.fullmatch(r"[1-9][0-9]*", value["build"]):
+        raise RuntimeError("Release build must be a positive canonical integer string")
+    tag = "v" + value["version"]
+    channel = value["release_channel"]
+    if channel == "stable":
+        valid_tag = value["release_tag"] == tag
+    elif channel == "preview":
+        valid_tag = bool(re.fullmatch(re.escape(tag) + r"-preview\.[1-9][0-9]*", value["release_tag"]))
+    else:
+        raise RuntimeError("Release channel must be stable or preview")
+    if not valid_tag:
+        raise RuntimeError("Release tag must match its version and channel")
+    return value
+
+
 def bundled_setup(original: str) -> str:
     split = "local preload = function(m) return function() return require(m) end end"
     if original.count(split) != 1 or "return require'hs._coresetup'.setup(...)" not in original:
@@ -69,7 +96,7 @@ def bundled_setup(original: str) -> str:
     tail = tail.replace("return require'hs._coresetup'.setup(...)",
         "return require'hs._coresetup'.setup(modpath, frameworkspath, prettypath, fullpath, "
         "configdir, docstringspath, true, autoload_extensions)")
-    return '''-- Wallpaper Veil binary-runtime prototype bootstrap.
+    return '''-- Wallpaper Veil bundled native-runtime bootstrap.
 -- All executable Lua/native modules are bundled; state lives in Application Support.
 local modpath, frameworkspath, prettypath, fullpath, configdir, docstringspath, hasinitfile, autoload_extensions = ...
 local code = assert(os.getenv("WV_APP_CODE"), "Wallpaper Veil launcher is required")
@@ -168,7 +195,8 @@ def bundle_component_notices(project: Path, acknowledgements: Path) -> dict:
 
 
 
-def build(output: Path, runtime: Path, own: Path) -> dict:
+def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None = None,
+          source_archive: Path | None = None) -> dict:
     project = own.parent
     if platform.system() != "Darwin":
         raise RuntimeError("This prototype must be built on macOS")
@@ -179,12 +207,13 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
         raise RuntimeError("--output must name a .app bundle")
     if runtime == output or output.is_relative_to(runtime):
         raise RuntimeError("Build output must not replace or sit inside the source runtime")
+    release = release_metadata(own)
     source = checked_source(project)
     original_info = plistlib.loads((runtime / "Contents/Info.plist").read_bytes())
-    if (original_info.get("CFBundleIdentifier") != "org.hammerspoon.Hammerspoon" or
-        original_info.get("CFBundleShortVersionString") != RUNTIME_VERSION or
-        original_info.get("CFBundleVersion") != RUNTIME_BUILD):
-        raise RuntimeError("Use the audited Hammerspoon 1.1.1 (6936) runtime bundle")
+    runtime_receipt = verify_runtime(project, runtime, source_manifest, source_archive)
+    source_built = runtime_receipt["engine_recompiled_from_source"]
+    prototype_type = (("source-built native engine" if source_built else "binary-runtime prototype")
+                      + " with NSWorkspace launcher and nested native application")
     app_sources = own / "app"
     if not (app_sources / "init.lua").is_file():
         raise RuntimeError("WallpaperVeil/app/init.lua is missing")
@@ -227,7 +256,11 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
         old_setup = (resources / "setup.lua").read_text()
         (resources / "setup.lua").write_text(bundled_setup(old_setup))
         acknowledgements = resources / "Acknowledgements"
-        acknowledgements.mkdir()
+        acknowledgements.mkdir(exist_ok=True)
+        if source_manifest is not None:
+            receipt_directory = acknowledgements / "SourceEngine"
+            receipt_directory.mkdir(exist_ok=True)
+            shutil.copy2(source_manifest, receipt_directory / "source-engine-manifest.json")
         for name, target_name in [
             ("LICENSE", "LICENSE"), ("CREDITS.md", "CREDITS.md"),
             ("LICENSES/Hammerspoon-MIT.txt", "Hammerspoon-MIT.txt"),
@@ -256,14 +289,16 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
                     "NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationAlwaysUsageDescription"]:
             info.pop(key, None)
         info.update({"CFBundleIdentifier": APP_ID, "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.3", "CFBundleVersion": "4",
+                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": release["version"], "CFBundleVersion": release["build"],
                      "CFBundleIconFile": "WallpaperVeil.icns",
                      "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
                      "NSAppleScriptEnabled": False, "SUEnableAutomaticChecks": False,
                      "SUAllowsAutomaticUpdates": False, "SUAutomaticallyUpdate": False, "SUSendProfileInfo": False,
                      "NSAppleEventsUsageDescription": "Wallpaper Veil uses macOS automation for desktop controls.",
-                     "WVPrototypeType": "binary-runtime prototype with NSWorkspace launcher and nested native application",
+                     "WVPrototypeType": prototype_type,
+                     "WVRuntimeOrigin": runtime_receipt["origin"],
                      "WVRuntimeVersion": RUNTIME_VERSION, "WVRuntimeBuild": RUNTIME_BUILD,
+                     "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"],
                      "WVUpstreamSourceCommit": SOURCE_COMMIT,
                      "NSHumanReadableCopyright": "Wallpaper Veil. Includes Hammerspoon and third-party software; see bundled acknowledgements."})
         with (runtime_contents / "Info.plist").open("wb") as stream:
@@ -272,12 +307,13 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             "CFBundleDevelopmentRegion": "en", "CFBundleInfoDictionaryVersion": "6.0",
             "CFBundlePackageType": "APPL", "CFBundleIdentifier": LAUNCHER_ID,
             "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.3", "CFBundleVersion": "4",
+            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": release["version"], "CFBundleVersion": release["build"],
             "LSUIElement": True, "LSMinimumSystemVersion": original_info.get("LSMinimumSystemVersion", "13.0"),
             "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
             "NSHumanReadableCopyright": info["NSHumanReadableCopyright"],
             "WVPrototypeType": info["WVPrototypeType"], "WVRuntimeBundleIdentifier": APP_ID,
             "WVRuntimeRelativePath": HELPER_RELATIVE_PATH,
+            "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"],
         }
         icon = own / "assets/WallpaperVeil.icns"
         if not icon.is_file():
@@ -296,19 +332,22 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             "-I", str(project / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement",
             str(own / "native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
         provenance = {
-            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.3", "build": "4",
+            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": release["version"], "build": release["build"],
+            "release_tag": release["release_tag"], "release_channel": release["release_channel"],
             "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
-            "type": "binary-runtime prototype with NSWorkspace launcher and nested native application",
+            "type": prototype_type,
             "runtime_relative_path": HELPER_RELATIVE_PATH,
             "launch_method": "NSWorkspace.openApplicationAtURL with early arguments and controlled WV environment",
             "launcher_is_permanent_supervisor": False,
-            "engine_recompiled_from_source": False, "launcher_recompiled_from_source": True, "ui_recompiled_from_source": True,
+            "engine_recompiled_from_source": source_built, "launcher_recompiled_from_source": True, "ui_recompiled_from_source": True,
             "source": source,
-            "runtime": {"input_bundle_name": runtime.name, "version": RUNTIME_VERSION, "build": RUNTIME_BUILD,
-                        "original_engine_sha256": sha256(runtime / "Contents/MacOS" / original_info["CFBundleExecutable"]),
-                        "original_setup_sha256": hashlib.sha256(old_setup.encode()).hexdigest()},
+            "runtime": {"input_bundle_name": runtime.name, **runtime_receipt},
             "source_hashes": {"launcher.m": sha256(own / "launcher.m"), "build_local.py": sha256(Path(__file__)),
-                              "native_ui.m": sha256(own / "native_ui.m"), "WallpaperVeil.icns": sha256(icon)},
+                              "native_ui.m": sha256(own / "native_ui.m"), "WallpaperVeil.icns": sha256(icon),
+                              "runtime_provenance.py": sha256(own / "runtime_provenance.py"),
+                              "version.json": sha256(own / "version.json"),
+                              **({"update_check.h": sha256(own / "update_check.h")}
+                                 if (own / "update_check.h").is_file() else {})},
             "component_notices": component_notices,
             "bundled_lua_hashes": code_hashes,
             "bundled_setup_sha256": sha256(resources / "setup.lua"),
@@ -351,10 +390,16 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--output", type=Path, default=own.parent.parent / "build.noindex/Wallpaper Veil.app")
     parser.add_argument("--runtime", type=Path, required=True,
-                        help="Verified Hammerspoon 1.1.1 runtime input; use ci/fetch_runtime.py to obtain it")
+                        help="Pinned official runtime or an extracted, verified source-engine archive")
+    parser.add_argument("--source-engine-manifest", type=Path,
+                        help="Source-engine manifest; requires --source-engine-archive")
+    parser.add_argument("--source-engine-archive", type=Path,
+                        help="Original source-engine ZIP bound to its manifest")
     args = parser.parse_args()
     try:
-        build(args.output.expanduser().resolve(), args.runtime.expanduser().resolve(), own)
+        build(args.output.expanduser().resolve(), args.runtime.expanduser().resolve(), own,
+              args.source_engine_manifest.expanduser().resolve() if args.source_engine_manifest else None,
+              args.source_engine_archive.expanduser().resolve() if args.source_engine_archive else None)
     except (OSError, RuntimeError, subprocess.CalledProcessError, ValueError) as error:
         print(f"Build failed: {error}", file=sys.stderr)
         return 1

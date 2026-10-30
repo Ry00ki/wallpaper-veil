@@ -116,8 +116,11 @@ local ok, failure = xpcall(function()
         probe.menuBar={inMenuBar=wallpaperVeil.menu:isInMenuBar(),
             title=wallpaperVeil.menu:title(),frame=frame and {x=frame.x,y=frame.y,w=frame.w,h=frame.h} or nil}
         -- macOS 27 can remotely host status items; frame is diagnostic only.
-        probe.appVersion = "0.1.3"
         probe.nativeUI = nativeUI.diagnostics()
+        probe.appVersion = probe.nativeUI.currentVersion
+        probe.appBuild = probe.nativeUI.currentBuild
+        probe.releaseTag = probe.nativeUI.currentReleaseTag
+        probe.releaseChannel = probe.nativeUI.releaseChannel
         probe.loginItem = nativeUI.loginStatus()
         probe.prototype = "Bundled upstream native runtime with app-owned launcher and Lua"
         writeReport(probe)
@@ -127,10 +130,25 @@ local ok, failure = xpcall(function()
         if not success then writeReport({ok=false,error=tostring(err),process=process()}) end
     end)
     if os.getenv("WV_UI_TEST") == "1" then
+        local function failUITest(problem, path, kind)
+            -- Receipt writing and native diagnostics can fail independently.
+            -- Always stop network work and close our window before retrying either.
+            pcall(nativeUI.cancelUpdateCheck)
+            pcall(nativeUI.closeAbout)
+            local read, result = pcall(nativeUI.diagnostics)
+            if not read or type(result) ~= "table" then result = {} end
+            result.ok = false
+            result.error = tostring(problem)
+            result.kind = kind or "native-About-qualification"
+            result.observedAtUTC = os.date("!%Y-%m-%dT%H:%M:%SZ")
+            local written, failure = pcall(writeReport, result, path)
+            if not written then
+                pcall(function() hs.printf("Wallpaper Veil UI qualification receipt failed: %s", tostring(failure)) end)
+            end
+        end
         after(1, function()
             local success, err = xpcall(function()
                 nativeUI.showAbout()
-                after(3, function() pcall(nativeUI.closeAbout) end)
                 after(0.5, function()
                     local captured, problem = xpcall(function()
                         local saved, why = nativeUI.saveAboutPreview(support .. "/about-preview.png")
@@ -138,19 +156,78 @@ local ok, failure = xpcall(function()
                         ui.previewSaved = saved
                         ui.ok = ui.configured and ui.nativeMainMenuReady and ui.aboutVisible and
                             ui.aboutTitle == "Wallpaper Veil" and not ui.engineWindowsVisible and
-                            ui.repositoryActionWired and ui.noticesActionWired and ui.aboutIconPresent and saved
+                            ui.repositoryActionWired and ui.noticesActionWired and ui.aboutIconPresent and saved and
+                            ui.updateActionWired and ui.releaseActionWired and
+                            ui.currentVersion ~= "" and ui.currentBuild ~= "" and ui.currentReleaseTag ~= ""
                         ui.captureError = why
+                        local function release(tag)
+                            return {tag_name=tag, draft=false, prerelease=tag:find("-preview.", 1, true) ~= nil,
+                                html_url="https://github.com/Ry00ki/wallpaper-veil/releases/tag/" .. tag}
+                        end
+                        local major = assert(ui.currentVersion:match("^(%d+)%."))
+                        local newer = string.format("v%d.0.0", tonumber(major)+1)
+                        local checks = {}
+                        local current = nativeUI.testUpdateResponse(hs.json.encode({release(ui.currentReleaseTag)}))
+                        checks.current = current.updateState == "current" and current.latestTag == ui.currentReleaseTag
+                        local available = nativeUI.testUpdateResponse(hs.json.encode({release(newer)}))
+                        checks.newer = available.updateState == "available" and available.latestTag == newer and
+                            available.latestURL == release(newer).html_url
+                        local denied = nativeUI.testUpdateResponse("[]", 403)
+                        checks.rateLimit = denied.updateState == "error" and
+                            denied.updateMessage:find("rate limit", 1, true) ~= nil
+                        local malformed = nativeUI.testUpdateResponse("{", 200)
+                        checks.invalidJSON = malformed.updateState == "error"
+                        local empty = nativeUI.testUpdateResponse("[]", 200)
+                        checks.empty = empty.updateState == "no-release"
+                        ui.updateFixtureChecks = checks
+                        for _, passed in pairs(checks) do if not passed then ui.ok=false end end
                         writeReport(ui, support .. "/ui-check.json")
+                        -- Explicit UI-test mode exercises the same manual action
+                        -- after offline fixtures; normal startup never checks.
+                        nativeUI.checkForUpdates()
+                        local deadline = hs.timer.secondsSinceEpoch() + 65
+                        local function pollUpdate()
+                            local passed, problem = xpcall(function()
+                                local result = nativeUI.diagnostics()
+                                if result.updateInProgress and hs.timer.secondsSinceEpoch() < deadline then
+                                    after(0.25, pollUpdate)
+                                    return
+                                end
+                                if result.updateInProgress then
+                                    nativeUI.cancelUpdateCheck()
+                                    result = nativeUI.diagnostics()
+                                    result.qualificationTimedOut = true
+                                    result.error = "The update-check qualification deadline was reached."
+                                end
+                                result.ok = not result.qualificationTimedOut and not result.updateInProgress and
+                                    (result.updateState == "current" or result.updateState == "ahead" or
+                                        result.updateState == "available")
+                                result.kind = "live-public-GitHub-release-check"
+                                result.observedAtUTC = os.date("!%Y-%m-%dT%H:%M:%SZ")
+                                local saved, why = nativeUI.saveAboutPreview(support .. "/about-update-preview.png")
+                                assert(saved, why or "The update-check About view could not be captured.")
+                                result.previewSaved = true
+                                writeReport(result, support .. "/update-check.json")
+                                after(1, function()
+                                    local closed, failure = pcall(nativeUI.closeAbout)
+                                    if not closed then
+                                        failUITest(failure, support .. "/update-check.json", "live-public-GitHub-release-check")
+                                    end
+                                end)
+                            end, debug.traceback)
+                            if not passed then
+                                failUITest(problem, support .. "/update-check.json", "live-public-GitHub-release-check")
+                            end
+                        end
+                        after(0.25, pollUpdate)
                     end, debug.traceback)
                     if not captured then
-                        pcall(nativeUI.closeAbout)
-                        writeReport({ok=false,error=problem}, support .. "/ui-check.json")
+                        failUITest(problem, support .. "/ui-check.json")
                     end
                 end)
             end, debug.traceback)
             if not success then
-                pcall(nativeUI.closeAbout)
-                writeReport({ok=false,error=err}, support .. "/ui-check.json")
+                failUITest(err, support .. "/ui-check.json")
             end
         end)
     end

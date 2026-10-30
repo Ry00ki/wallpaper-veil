@@ -1,0 +1,45 @@
+name: Wallpaper Veil source engine build
+
+# Manual developer artifact only. The preview packaging workflow remains
+# separate; this job never launches the engine or publishes a release.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: wallpaper-veil-source-engine-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  source-engine:
+    if: github.repository == 'Ry00ki/wallpaper-veil' && github.event.repository.private == false
+    runs-on: macos-26
+    timeout-minutes: 20
+    steps:
+      - name: Check out recipe revision and complete native source history
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Verify runtime provenance and native release rules
+        run: python3 -m unittest discover -s WallpaperVeil/tests -p 'test_*.py' -v
+      - name: Compile and verify the pinned universal source engine
+        timeout-minutes: 18
+        run: |
+          python3 WallpaperVeil/ci/build_source_engine.py \
+            --destination "$RUNNER_TEMP/wallpaper-veil-source-engine-output"
+      - name: Retain documented engine artifact and build log
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: wallpaper-veil-source-engine-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/wallpaper-veil-source-engine-output/*.zip
+            ${{ runner.temp }}/wallpaper-veil-source-engine-output/*.json
+            ${{ runner.temp }}/wallpaper-veil-source-engine-output/*.sha256
+            ${{ runner.temp }}/wallpaper-veil-source-engine-output/build.log
+          if-no-files-found: warn
+          retention-days: 14
+          compression-level: 0

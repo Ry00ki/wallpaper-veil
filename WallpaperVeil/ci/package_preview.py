@@ -26,6 +26,42 @@ def verify(app: Path) -> None:
     subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
 
 
+def read_build_report(app: Path) -> dict:
+    report_path = app.with_suffix('.build.json')
+    if not report_path.is_file():
+        raise RuntimeError('The builder report is missing; refusing an undocumented preview')
+    report = json.loads(report_path.read_text())
+    embedded = json.loads((app / 'Contents/Resources/wallpaper-veil-build.json').read_text())
+    nested = json.loads((app / 'Contents/Helpers/Wallpaper Veil Runtime.app/Contents/Resources/wallpaper-veil-build.json').read_text())
+    if nested != embedded or any(report.get(key) != value for key, value in embedded.items()):
+        raise RuntimeError('Builder report does not match the signed application provenance')
+    binaries = {'signed_launcher_sha256': app / 'Contents/MacOS/WallpaperVeil',
+                'signed_engine_sha256': app / 'Contents/Helpers/Wallpaper Veil Runtime.app/Contents/MacOS/WallpaperVeilRuntime'}
+    for key, path in binaries.items():
+        if report.get(key) != hashlib.sha256(path.read_bytes()).hexdigest():
+            raise RuntimeError('Builder report does not match the signed application executables')
+    release_fields = {'CFBundleShortVersionString': 'version', 'CFBundleVersion': 'build',
+                      'WVReleaseTag': 'release_tag', 'WVReleaseChannel': 'release_channel'}
+    if any(not isinstance(report.get(key), str) or not report[key] for key in release_fields.values()):
+        raise RuntimeError('Signed provenance is missing release metadata')
+    for bundle in (app, app / 'Contents/Helpers/Wallpaper Veil Runtime.app'):
+        info = plistlib.loads((bundle / 'Contents/Info.plist').read_bytes())
+        if any(info.get(field) != report[key] for field, key in release_fields.items()):
+            raise RuntimeError('Application release metadata disagrees with signed provenance')
+    runtime = report.get('runtime', {})
+    origin = runtime.get('origin')
+    source_built = report.get('engine_recompiled_from_source')
+    if (origin not in {'official-release', 'source-build'} or type(source_built) is not bool
+            or source_built != (origin == 'source-build')
+            or runtime.get('engine_recompiled_from_source') is not source_built):
+        raise RuntimeError('Builder runtime origin and source-build flags disagree')
+    if source_built and not isinstance(runtime.get('source_manifest'), dict):
+        raise RuntimeError('Source-built application is missing its engine manifest')
+    if not source_built and not isinstance(runtime.get('release_pin'), dict):
+        raise RuntimeError('Official-runtime application is missing its release pin')
+    return report
+
+
 def package(app: Path, destination: Path) -> Path:
     if platform.system() != 'Darwin':
         raise RuntimeError('Native signature verification requires macOS')
@@ -35,27 +71,34 @@ def package(app: Path, destination: Path) -> Path:
         raise RuntimeError('Artifact output must remain outside the signed app bundle')
     destination.mkdir(parents=True, exist_ok=True)
     verify(app)
+    report = read_build_report(app)
     archive = destination / 'wallpaper-veil-preview.zip'
     if archive.exists():
         raise RuntimeError('Choose an artifact directory without an existing preview ZIP')
     subprocess.run(['/usr/bin/ditto', '-c', '-k', '--norsrc', '--noextattr', '--keepParent',
                     str(app), str(archive)], check=True)
-    with tempfile.TemporaryDirectory(prefix='wallpaper-veil-extraction-') as temporary:
+    with tempfile.TemporaryDirectory(prefix='wallpaper-veil-extraction-', suffix='.noindex') as temporary:
         extracted = Path(temporary)
         subprocess.run(['/usr/bin/ditto', '--noqtn', '-x', '-k', str(archive), str(extracted)], check=True)
         verify(extracted / app.name)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     archive.with_suffix('.zip.sha256').write_text(f'{digest}  {archive.name}\n')
-    build_report = app.with_suffix('.build.json')
-    if not build_report.is_file():
-        raise RuntimeError('The builder report is missing; refusing an undocumented preview')
-    shutil.copy2(build_report, destination / 'wallpaper-veil-build.json')
-    shutil.copy2(Path(__file__).with_name('runtime.json'), destination / 'wallpaper-veil-runtime-pin.json')
+    shutil.copy2(app.with_suffix('.build.json'), destination / 'wallpaper-veil-build.json')
+    runtime = report['runtime']
+    if runtime['origin'] == 'source-build':
+        receipt_name, receipt = 'wallpaper-veil-source-engine.json', runtime['source_manifest']
+    else:
+        receipt_name, receipt = 'wallpaper-veil-runtime-pin.json', runtime['release_pin']
+    (destination / receipt_name).write_text(json.dumps(receipt, indent=2) + '\n')
     summary = {
         'project': 'Wallpaper Veil', 'archive': archive.name, 'sha256': digest,
+        'version': report['version'], 'build': report['build'],
+        'release_tag': report['release_tag'], 'release_channel': report['release_channel'],
         'extracted_signatures_verified': True, 'app_launched': False,
-        'engine_recompiled_from_source': False, 'launcher_recompiled_from_source': True,
-        'ui_recompiled_from_source': True,
+        'runtime_origin': runtime['origin'],
+        'engine_recompiled_from_source': report['engine_recompiled_from_source'],
+        'launcher_recompiled_from_source': report['launcher_recompiled_from_source'],
+        'ui_recompiled_from_source': report['ui_recompiled_from_source'],
         'distribution': 'Experimental preview, ad hoc signed; not Developer ID signed or notarized',
     }
     (destination / 'wallpaper-veil-package.json').write_text(json.dumps(summary, indent=2) + '\n')
