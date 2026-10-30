@@ -11,7 +11,7 @@ Changes are grouped by release. This project has not published a stable release.
 - Bound Notification Center preservation even when snapshots fail; abort safely when an event tap cannot start.
 - Run portable brightness, restoration, widget failure and lifecycle regression suites in source checks.
 
-Actual login-session startup, Accessibility-granted UI automation and sleep/Spaces/display connection qualification remain tracked separately.
+Verified launch at login after a real reboot on macOS 27.0.1, with one Wallpaper Veil runtime and no separate Hammerspoon process. Focused brightness checks passed on two Studio Displays. Accessibility-granted UI automation and sleep/Spaces/display connection qualification remain tracked separately.
 
 ## 0.1.2 preview - 30.10.26
 

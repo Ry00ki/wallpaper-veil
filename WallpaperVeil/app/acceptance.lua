@@ -147,6 +147,31 @@ function M.run(done, options)
     end
 
     complete = function(sourceRestored, followerRestored)
+        -- The source may have drifted while follower restoration was waiting.
+        -- Check the current pair together before trusting earlier phase results
+        -- or allowing sync to copy a changed source over the restored follower.
+        local final = {checkedAt = now()}
+        if source and sourceBrightness ~= nil then
+            local value, err = read(source)
+            local matches = valid(value) and math.abs(value - sourceBrightness) <= config.tolerance
+            local detail = report.brightness.restoreSource or {target = sourceBrightness}
+            detail.finalObserved, detail.finalReadError, detail.finalConfirmed = value, err, matches
+            report.brightness.restoreSource = detail
+            final.source, final.sourceReadError, final.sourceMatchesInitial = value, err, matches
+            sourceRestored = sourceRestored and matches
+            check("source brightness restored", sourceRestored, detail)
+        end
+        if follower and followerBrightness ~= nil then
+            local value, err = read(follower)
+            local matches = valid(value) and math.abs(value - followerBrightness) <= config.tolerance
+            local detail = report.brightness.restoreFollower or {target = followerBrightness}
+            detail.finalObserved, detail.finalReadError, detail.finalConfirmed = value, err, matches
+            report.brightness.restoreFollower = detail
+            final.follower, final.followerReadError, final.followerMatchesInitial = value, err, matches
+            followerRestored = followerRestored and matches
+            check("follower brightness restored", followerRestored, detail)
+        end
+        report.brightness.finalRestoration = final
         -- Never restart sync while restoration writes are still unconfirmed.
         if sourceRestored and followerRestored then
             restoreCall("sync setting", function() sync.setEnabled(old.syncEnabled, true) end)

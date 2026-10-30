@@ -15,7 +15,7 @@ Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Con
 - Use optional desktop-widget and clock/Notification Center controls.
 - Access Quit and About Wallpaper Veil from the app's menu.
 
-The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. Sleep/wake, actual login-session startup and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
+The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. A local two-display test passed brightness synchronization, independent adjustment and restoration. Actual launch at login was verified after reboot on macOS 27.0.1. Sleep/wake and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
 
 ## How it runs
 

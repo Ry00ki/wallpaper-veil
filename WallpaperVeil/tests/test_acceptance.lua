@@ -90,6 +90,29 @@ test("cancelling during restoration cannot leave stale callbacks or duplicate re
     assert(calls == 1 and e.source.value == 0.5 and e.follower.value == 0.5)
 end)
 
+test("source drift during follower restoration fails the final pair gate", function()
+    local e
+    e = create{syncEnabled = true, follower = {ignore = function(value, count)
+        if value == 0.5 and count == 3 then
+            -- Source restoration has already confirmed. Drift before the next
+            -- follower read would be missed by earlier per-display booleans.
+            e.schedule(0.05, function() e.source.value = 0.625 end)
+        end
+        return false
+    end}}.load(app)
+    local report
+    e.acceptance.run(function(value) report = value end)
+    e.advance(24, function() return report ~= nil end)
+    assert(report and not report.ok and report.recoveryRequired)
+    assert(not e.sync.enabled, "Sync resumed despite a stale source restoration result")
+    local sourceResult = e.check(report, "source brightness restored")
+    assert(not sourceResult.passed and sourceResult.detail.finalObserved == 0.625)
+    assert(sourceResult.detail.confirmed and not sourceResult.detail.finalConfirmed)
+    assert(e.check(report, "follower brightness restored").passed)
+    assert(not e.check(report, "sync setting restored").passed)
+    assert(e.activeAcceptanceTimers() == 0)
+end)
+
 test("unaligned initial pair is rejected before a large hardware adjustment", function()
     local e, report = run{sourceValue = 0.8, followerValue = 0.2}
     assert(not report.ok and #e.source.writes == 0 and #e.follower.writes == 0)
