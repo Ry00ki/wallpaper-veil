@@ -256,7 +256,7 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
                     "NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationAlwaysUsageDescription"]:
             info.pop(key, None)
         info.update({"CFBundleIdentifier": APP_ID, "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.2", "CFBundleVersion": "3",
+                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.3", "CFBundleVersion": "4",
                      "CFBundleIconFile": "WallpaperVeil.icns",
                      "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
                      "NSAppleScriptEnabled": False, "SUEnableAutomaticChecks": False,
@@ -272,7 +272,7 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             "CFBundleDevelopmentRegion": "en", "CFBundleInfoDictionaryVersion": "6.0",
             "CFBundlePackageType": "APPL", "CFBundleIdentifier": LAUNCHER_ID,
             "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.2", "CFBundleVersion": "3",
+            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.3", "CFBundleVersion": "4",
             "LSUIElement": True, "LSMinimumSystemVersion": original_info.get("LSMinimumSystemVersion", "13.0"),
             "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
             "NSHumanReadableCopyright": info["NSHumanReadableCopyright"],
@@ -290,13 +290,13 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
         clang = run("/usr/bin/xcrun", "--find", "clang", capture=True)
         sdk = run("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path", capture=True)
         run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=13.0",
-            "-framework", "Foundation", "-framework", "AppKit", str(own / "launcher.m"), "-o", str(macos / "WallpaperVeil"))
+            "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement", str(own / "launcher.m"), "-o", str(macos / "WallpaperVeil"))
         run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64",
             "-mmacosx-version-min=13.0", "-bundle", "-undefined", "dynamic_lookup",
-            "-I", str(project / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit",
+            "-I", str(project / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement",
             str(own / "native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
         provenance = {
-            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.2", "build": "3",
+            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.3", "build": "4",
             "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
             "type": "binary-runtime prototype with NSWorkspace launcher and nested native application",
             "runtime_relative_path": HELPER_RELATIVE_PATH,
@@ -313,7 +313,7 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             "bundled_lua_hashes": code_hashes,
             "bundled_setup_sha256": sha256(resources / "setup.lua"),
             "launcher_architectures": run("/usr/bin/lipo", "-archs", str(macos / "WallpaperVeil"), capture=True),
-            "login_helper_policy": "Removed copied LoginItems; prototype does not register at login",
+            "login_helper_policy": "Copied LoginItems removed; app-owned SMAppService registration targets the outer launcher only when requested",
             "removed_login_helpers": removed_login_helpers,
             "distribution": "Ad hoc signed for local testing; not Developer ID signed or notarized",
             "application_launched_by_builder": False,

@@ -1,5 +1,6 @@
 -- Wallpaper Veil runtime inspection. Load only after the app-owned init completes.
--- No setting writes, menu callbacks, hardware writes, launches or reloads.
+-- No settings, menu callbacks, hardware changes, login changes or app reloads.
+-- Login inspection may run the bundled read-only status command.
 -- Usage: local p = dofile('/private/tmp/wallpaper-veil-runtime-probe.lua')
 -- local report = p.collect({expectedBundleID='...', expectedModuleRoot='...'})
 -- The caller may serialize report with hs.json.encode(report, true).
@@ -119,7 +120,10 @@ function Probe.collect(options)
     report.paths = {configdir = hs.configdir, packagePath = package.path,
         packageCPath = package.cpath, cwd = attempt(hs.fs.currentDir)}
     report.application = {accessibilityGranted = attempt(function() return hs.accessibilityState(false) end),
-        launchAtLogin = attempt(function() return hs.autoLaunch() end),
+        launchAtLogin = attempt(function()
+            local veil = rawget(_G, "wallpaperVeil")
+            return veil and veil.loginItemStatus and veil.loginItemStatus().enabled or false
+        end),
         dockIconVisible = attempt(function() return hs.dockIcon() end),
         engineMenuIconVisible = attempt(function() return hs.menuIcon() end),
         crashUploads = attempt(function() return hs.uploadCrashData() end)}

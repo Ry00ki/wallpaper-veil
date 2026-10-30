@@ -11,7 +11,7 @@ local drain, poll
 local function now() return hs.timer.absoluteTime()/1e9 end
 local function clearRepair()
     repair = nil
-    if cancelTap then cancelTap:stop(); cancelTap=nil end
+    if cancelTap then pcall(function() cancelTap:stop() end);cancelTap=nil end
 end
 local function stopTask()
     if task then pcall(function() task:terminate() end);task=nil end
@@ -40,16 +40,26 @@ local function request(visible,preserve)
     return true
 end
 local function beginRepair(snapshot)
+    clearRepair()
     local r={frame=snapshot.frame,writing=true,deadline=now()+2,attempted=false}
-    repair=r
-    -- A user's dismissal cancels preservation; never fight a click-away or Escape.
-    cancelTap=hs.eventtap.new({hs.eventtap.event.types.leftMouseDown,
+    -- Do not change the preference unless user-dismissal monitoring is active.
+    local created,tap=pcall(hs.eventtap.new,{hs.eventtap.event.types.leftMouseDown,
         hs.eventtap.event.types.rightMouseDown,hs.eventtap.event.types.keyDown},function(event)
         if event:getType()~=hs.eventtap.event.types.keyDown or event:getKeyCode()==53 then
             clearRepair()
         end
         return false
-    end):start()
+    end)
+    if not created or not tap then
+        return nil,'Could not monitor Notification Center dismissal'
+    end
+    local started,result=pcall(function() return tap:start() end)
+    local inspected,enabled=pcall(function() return tap:isEnabled() end)
+    if not started or not result or not inspected or enabled~=true then
+        pcall(function() tap:stop() end)
+        return nil,'Could not monitor Notification Center dismissal'
+    end
+    repair,cancelTap=r,tap
     return r
 end
 
@@ -76,12 +86,18 @@ drain=function()
             if not hs.accessibilityState(false) then
                 fail('Accessibility is needed to keep Notification Center open');drain();return
             end
-            transaction=beginRepair(snapshot)
+            local problem
+            transaction,problem=beginRepair(snapshot)
+            if not transaction then
+                fail(problem);drain();return
+            end
         end
         local wrote=startTask('/usr/bin/defaults',{'write','com.apple.WindowManager','StandardHideWidgets','-int',visible and '0' or '1'},function(exit)
             task=nil
             if exit==0 then
-                lastApplied=visible;errorMessage=nil
+                lastApplied=visible
+                -- A late write must not erase an expired preservation error.
+                if not transaction or repair==transaction then errorMessage=nil end
                 if transaction and repair==transaction then
                     transaction.writing=false
                     transaction.readyAt=now()+0.12
@@ -97,14 +113,16 @@ end
 
 poll=function()
     if not running then return end
+    -- Snapshot failures must not extend the bounded preservation transaction.
+    if repair and now()>=repair.deadline then
+        fail('Could not keep Notification Center open');return
+    end
     local snapshot,problem=panel.snapshot()
     if not snapshot then errorMessage=problem or 'Could not inspect Notification Center';return end
     local isOpen=snapshot.open
     if repair then
         local r=repair
-        if now()>r.deadline then
-            fail('Could not keep Notification Center open')
-        elseif r.writing then return
+        if r.writing then return
         elseif isOpen then
             if r.attempted or now()>r.readyAt+0.45 then clearRepair() end
             lastOpen=true

@@ -4,8 +4,11 @@ local support = assert(os.getenv("WV_APPLICATION_SUPPORT"), "Missing app data di
 local bundleID = "com.ry00ki.wallpaperveil"
 local reportPath = support .. "/diagnostics.json"
 wallpaperVeilAppTimers = {}
+local appActive = true
 local function after(seconds, callback)
-    local timer = hs.timer.doAfter(seconds, callback)
+    local timer = hs.timer.doAfter(seconds, function()
+        if appActive then callback() end
+    end)
     wallpaperVeilAppTimers[#wallpaperVeilAppTimers+1] = timer
     return timer
 end
@@ -27,6 +30,19 @@ local function quit()
     local app = hs.application.applicationForPID(hs.processInfo.processID)
     if app then app:kill() end
 end
+
+local function cleanup()
+    if not appActive then return end
+    appActive = false
+    for _, timer in ipairs(wallpaperVeilAppTimers) do pcall(function() timer:stop() end) end
+    wallpaperVeilAppTimers = {}
+    local acceptance = package.loaded["acceptance"]
+    if acceptance and acceptance.cancel then pcall(acceptance.cancel) end
+    if displayBrightnessSync then pcall(displayBrightnessSync.stop) end
+    if wallpaperVeil then pcall(wallpaperVeil.stop) end
+end
+-- Install cleanup before any component can partially start.
+hs.shutdownCallback = cleanup
 
 hs.uploadCrashData(false)
 hs.menuIcon(false)
@@ -53,12 +69,30 @@ local ok, failure = xpcall(function()
         after(0.2, quit)
         return
     end
-    wallpaperVeil = require("wallpaper_veil").start()
-    displayBrightnessSync = require("display_brightness_sync").start(wallpaperVeil)
+    wallpaperVeil = require("wallpaper_veil")
+    wallpaperVeil.loginItemStatus = nativeUI.loginStatus
+    wallpaperVeil.start()
+    displayBrightnessSync = require("display_brightness_sync")
+    displayBrightnessSync.start(wallpaperVeil)
     local baseMenu = wallpaperVeil.menuItems
     wallpaperVeil.menuItems = function(...)
         local items = baseMenu(...)
         items[#items+1] = {title="-"}
+        local login = nativeUI.loginStatus()
+        local settings = {
+            {title="Launch at login", checked=login.registered, disabled=not login.ok,
+                fn=function() nativeUI.setLaunchAtLogin(not login.registered) end},
+            {title="Login Items settings…", fn=nativeUI.openLoginSettings},
+            {title="-"},
+            {title=hs.accessibilityState(false) and "Accessibility allowed" or "Widget automation needs Accessibility", disabled=true},
+            {title="Allow Accessibility…", fn=function() hs.accessibilityState(true) end},
+        }
+        if login.requiresApproval then
+            table.insert(settings, 2, {title="Approval needed in Login Items settings", disabled=true})
+        elseif not login.ok then
+            table.insert(settings, 2, {title="Login setting unavailable", disabled=true})
+        end
+        items[#items+1] = {title="App settings", menu=settings}
         items[#items+1] = {title="Quit Wallpaper Veil", fn=quit}
         items[#items+1] = {title="About Wallpaper Veil", fn=function()
             nativeUI.showAbout()
@@ -72,12 +106,6 @@ local ok, failure = xpcall(function()
         wallpaperVeil.menu:autosaveName("WallpaperVeilStandalone")
         wallpaperVeil.menu:setTitle(wallpaperVeil.enabled and "◐ Veil" or "○ Veil")
     end)
-    hs.shutdownCallback = function()
-        local acceptance=package.loaded["acceptance"]
-        if acceptance and acceptance.cancel then pcall(acceptance.cancel) end
-        if displayBrightnessSync then pcall(displayBrightnessSync.stop) end
-        if wallpaperVeil then pcall(wallpaperVeil.stop) end
-    end
     local function diagnostic()
         local probe = require("runtime_probe").collect{
             expectedBundleID=bundleID, expectedModuleRoot=code}
@@ -88,8 +116,9 @@ local ok, failure = xpcall(function()
         probe.menuBar={inMenuBar=wallpaperVeil.menu:isInMenuBar(),
             title=wallpaperVeil.menu:title(),frame=frame and {x=frame.x,y=frame.y,w=frame.w,h=frame.h} or nil}
         -- macOS 27 can remotely host status items; frame is diagnostic only.
-        probe.appVersion = "0.1.2"
+        probe.appVersion = "0.1.3"
         probe.nativeUI = nativeUI.diagnostics()
+        probe.loginItem = nativeUI.loginStatus()
         probe.prototype = "Bundled upstream native runtime with app-owned launcher and Lua"
         writeReport(probe)
     end
@@ -140,6 +169,7 @@ local ok, failure = xpcall(function()
     end
 end, debug.traceback)
 if not ok then
+    cleanup()
     writeReport({ok=false, error=failure, process=process()})
     hs.alert.show("Wallpaper Veil could not start. See diagnostics.json.")
 end

@@ -8,6 +8,8 @@ Use [issues](https://github.com/Ry00ki/wallpaper-veil/issues) for reproducible b
 
 Fork the repository, create a branch from `main`, make a scoped change, and open a [pull request](https://github.com/Ry00ki/wallpaper-veil/pulls) against `main`. Explain the resulting behavior and checks performed. The Ubuntu source checks run automatically; macOS preview builds are dispatched manually.
 
+`main` requires a pull request and passing `Source checks` from GitHub Actions against an up-to-date base. Conversation threads must be resolved. Force pushes and deletion are blocked, including for repository administrators. A second-person approval is not required for this solo-maintained project.
+
 ## Getting started
 
 Read the [README](README.md) for the current architecture and local build recipe. The repository retains Hammerspoon source history, while the prototype builder currently compiles the Wallpaper Veil launcher and native UI module and packages a matching prebuilt engine. Do not describe a launcher-only change as a complete engine rebuild.

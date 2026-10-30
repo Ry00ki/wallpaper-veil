@@ -1,5 +1,6 @@
 #import <AppKit/AppKit.h>
 #import <Foundation/Foundation.h>
+#import <ServiceManagement/ServiceManagement.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <stdio.h>
@@ -10,6 +11,7 @@
 #include <unistd.h>
 
 static NSString * const WVBundleID = @"com.ry00ki.wallpaperveil";
+static NSString * const WVLauncherBundleID = @"com.ry00ki.wallpaperveil.launcher";
 static NSString * const WVMigrationKey = @"WallpaperVeilScopedMigrationVersion";
 
 static void fail(NSString *message, int code) {
@@ -67,21 +69,113 @@ static void migratePreferences(void) {
     if (![defaults synchronize]) fail(@"Could not save its migrated preferences", 74);
 }
 
+static int writeLoginJSON(NSDictionary *value, int code) {
+    NSError *error = nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:value options:NSJSONWritingSortedKeys error:&error];
+    if (!data) {
+        fprintf(stderr, "Wallpaper Veil: Cannot encode login-item status\n");
+        return 74;
+    }
+    if (fwrite(data.bytes, 1, data.length, stdout) != data.length || fputc('\n', stdout) == EOF) return 74;
+    return code;
+}
+
+static int loginFailure(NSString *command, NSString *message, int code) {
+    return writeLoginJSON(@{
+        @"schema": @1, @"ok": @NO, @"command": command,
+        @"targetBundleID": WVLauncherBundleID, @"service": @"mainApp",
+        @"error": @{@"description": message}
+    }, code);
+}
+
+static NSString *loginStatusName(SMAppServiceStatus status) {
+    switch (status) {
+        case SMAppServiceStatusNotRegistered: return @"notRegistered";
+        case SMAppServiceStatusEnabled: return @"enabled";
+        case SMAppServiceStatusRequiresApproval: return @"requiresApproval";
+        case SMAppServiceStatusNotFound: return @"notFound";
+    }
+    return @"unknown";
+}
+
+static int handleLoginCommand(NSString *command, NSBundle *bundle) {
+    if (@available(macOS 13.0, *)) {
+        // mainAppService always refers to this process's MAIN bundle. This code
+        // must execute in the outer launcher, never in the nested native app:
+        // login must pass through the controlled NSWorkspace startup below.
+        SMAppService *service = SMAppService.mainAppService;
+        SMAppServiceStatus before = service.status;
+        BOOL accepted = YES, changed = NO;
+        NSError *error = nil;
+        if ([command isEqualToString:@"--enable-login"]) {
+            // Preserve a pending approval instead of repeatedly registering or
+            // trying to override a decision made in System Settings.
+            if (before != SMAppServiceStatusEnabled && before != SMAppServiceStatusRequiresApproval) {
+                accepted = [service registerAndReturnError:&error];
+                changed = accepted;
+            }
+        } else if ([command isEqualToString:@"--disable-login"]) {
+            if (before != SMAppServiceStatusNotRegistered) {
+                accepted = [service unregisterAndReturnError:&error];
+                changed = accepted;
+            }
+        }
+        SMAppServiceStatus status = service.status;
+        BOOL registered = status == SMAppServiceStatusEnabled || status == SMAppServiceStatusRequiresApproval;
+        NSMutableDictionary *result = [@{
+            @"schema": @1, @"ok": @(accepted), @"command": command,
+            @"supported": @YES, @"service": @"mainApp",
+            @"targetBundleID": WVLauncherBundleID, @"targetBundlePath": bundle.bundlePath,
+            @"status": @(status), @"statusString": loginStatusName(status),
+            @"previousStatusString": loginStatusName(before),
+            @"registration": registered ? @"registered" :
+                (status == SMAppServiceStatusNotRegistered ? @"notRegistered" : @"unavailable"),
+            @"registered": @(registered), @"enabled": [NSNumber numberWithBool:(status == SMAppServiceStatusEnabled)],
+            @"approvalNeeded": [NSNumber numberWithBool:(status == SMAppServiceStatusRequiresApproval)],
+            @"requiresApproval": [NSNumber numberWithBool:(status == SMAppServiceStatusRequiresApproval)], @"changed": @(changed)
+        } mutableCopy];
+        if (error) result[@"error"] = @{
+            @"domain": error.domain, @"code": @(error.code), @"description": error.localizedDescription
+        };
+        return writeLoginJSON(result, accepted ? 0 : 1);
+    }
+    return writeLoginJSON(@{
+        @"schema": @1, @"ok": @NO, @"command": command,
+        @"supported": @NO, @"service": @"mainApp", @"targetBundleID": WVLauncherBundleID,
+        @"statusString": @"unsupported", @"enabled": @NO, @"registered": @NO,
+        @"approvalNeeded": @NO, @"requiresApproval": @NO, @"changed": @NO,
+        @"error": @{@"description": @"Launch at login requires macOS 13 or later"}
+    }, 69);
+}
+
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         umask(0077);
         BOOL verifyOnly = NO, selfTest = NO, uiTest = NO;
+        NSString *loginCommand = nil;
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--verify-only") == 0) verifyOnly = YES;
             else if (strcmp(argv[i], "--self-test") == 0) selfTest = YES;
             else if (strcmp(argv[i], "--ui-test") == 0) uiTest = YES;
-            else if (strncmp(argv[i], "-psn_", 5) != 0) fail(@"Supported options: --verify-only, --self-test, --ui-test", 64);
+            else if (strcmp(argv[i], "--login-status") == 0 || strcmp(argv[i], "--enable-login") == 0 ||
+                     strcmp(argv[i], "--disable-login") == 0) {
+                NSString *requested = [NSString stringWithUTF8String:argv[i]];
+                if (loginCommand) return loginFailure(requested, @"Choose one login-item command", 64);
+                loginCommand = requested;
+            }
+            else if (strncmp(argv[i], "-psn_", 5) != 0) fail(@"Supported options: --verify-only, --self-test, --ui-test, --login-status, --enable-login, --disable-login", 64);
         }
+        if (loginCommand && (verifyOnly || selfTest || uiTest))
+            return loginFailure(loginCommand, @"Login-item commands cannot be combined with verification modes", 64);
         if ((int)verifyOnly + (int)selfTest + (int)uiTest > 1) fail(@"Choose one verification mode", 64);
         NSBundle *bundle = NSBundle.mainBundle;
-        if (![bundle.bundleIdentifier isEqualToString:@"com.ry00ki.wallpaperveil.launcher"]) {
+        if (![bundle.bundleIdentifier isEqualToString:WVLauncherBundleID]) {
+            if (loginCommand) return loginFailure(loginCommand, @"Run this command from the outer Wallpaper Veil.app launcher", 78);
             fail(@"Start the launcher inside the completed Wallpaper Veil.app bundle", 78);
         }
+        // Status/control calls never launch the helper, migrate preferences,
+        // create application-state files, or redirect their JSON stdout.
+        if (loginCommand) return handleLoginCommand(loginCommand, bundle);
         NSURL *helperURL = [bundle.bundleURL URLByAppendingPathComponent:@"Contents/Helpers/Wallpaper Veil Runtime.app" isDirectory:YES];
         NSBundle *helper = [NSBundle bundleWithURL:helperURL];
         if (![helper.bundleIdentifier isEqualToString:WVBundleID] ||

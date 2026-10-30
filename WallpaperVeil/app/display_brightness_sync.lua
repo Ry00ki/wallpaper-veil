@@ -1,6 +1,7 @@
 -- Wallpaper Veil brightness-sync extension, version 1.0.0.
 -- Local only. Native hardware brightness; no gamma, overlays or network calls.
-local M = { interval = 0.5, tolerance = 0.02, writeTimeout = 2.0 }
+local M = { interval = 0.5, tolerance = 0.02, writeTimeout = 2.0,
+    retryInterval = 0.5, maxWriteAttempts = 3 }
 local PREFIX = "wallpaperVeil.brightnessSync."
 
 local function valid(value)
@@ -81,6 +82,7 @@ function M.setEnabled(enabled, quiet)
     if M.timer then M.timer:stop(); M.timer = nil end
     M.pending = nil
     if enabled then
+        M.lastFailure = nil
         automaticPair()
         local source, _, reason = pair()
         if not source then
@@ -106,10 +108,25 @@ function M.setEnabled(enabled, quiet)
     return M.enabled
 end
 
-local function fail(message)
+local function fail(message, cause)
+    local lastWrite = M.lastWrite
     M.setEnabled(false, true)
+    M.lastFailure = { cause = cause, message = message, write = lastWrite }
     M.message = message
     hs.alert.show("Brightness sync stopped: " .. message)
+end
+
+local function requestFollower(screen, pending, now)
+    pending.attempts = pending.attempts + 1
+    pending.lastRequestedAt = now
+    pending.nextRetry = now + M.retryInterval
+    local ok, result = pcall(function() return screen:setBrightness(pending.value) end)
+    -- The native API returns a screen even when the hardware write is ignored.
+    -- A returned object is only an attempted request; a later read must confirm it.
+    pending.requestReturned = ok and result ~= nil and result ~= false
+    pending.requestError = not ok and tostring(result)
+        or (not pending.requestReturned and "Hardware request returned no screen" or nil)
+    M.lastWrite = pending
 end
 
 function M.tick()
@@ -122,30 +139,37 @@ function M.tick()
         return
     end
     local now = hs.timer.secondsSinceEpoch()
-    if M.pending then
-        if math.abs(follower.brightness - M.pending.value) <= M.tolerance then
-            M.pending = nil
-        elseif now >= M.pending.deadline then
-            fail("The follower did not confirm the requested hardware brightness")
-            return
-        else
-            M.message = "Waiting for hardware brightness confirmation"
-            return
-        end
+    if M.pending and math.abs(source.brightness - M.pending.value) > M.tolerance then
+        -- Source changes supersede an unconfirmed older request. Waiting for the
+        -- obsolete value could otherwise disable healthy sync at its deadline.
+        M.pending.superseded = true
+        M.pending = nil
     end
     if math.abs(source.brightness - follower.brightness) <= M.tolerance then
+        if M.pending then
+            M.pending.confirmed = true
+            M.pending.observed = follower.brightness
+            M.lastWrite = M.pending
+        end
+        M.pending = nil
         M.message = string.format("On: following source brightness (%d%%)",
             math.floor(source.brightness * 100 + 0.5))
         return
     end
-    local value = source.brightness
-    local ok, result = pcall(function() return follower.screen:setBrightness(value) end)
-    if not ok or not result then
-        fail("The follower rejected the hardware brightness request")
-        return
+    if not M.pending then
+        M.pending = { value = source.brightness, deadline = now + M.writeTimeout,
+            attempts = 0, observed = follower.brightness, confirmed = false }
+        requestFollower(follower.screen, M.pending, now)
+    else
+        M.pending.observed = follower.brightness
+        if now >= M.pending.deadline then
+            local cause = M.pending.requestError and "follower-request-error" or "follower-write-unconfirmed"
+            fail("The follower did not confirm the requested hardware brightness", cause)
+            return
+        elseif M.pending.attempts < M.maxWriteAttempts and now >= M.pending.nextRetry then
+            requestFollower(follower.screen, M.pending, now)
+        end
     end
-    -- setBrightness returns a screen, not an API-success flag. Confirm later.
-    M.pending = { value = value, deadline = now + M.writeTimeout }
     M.message = "Waiting for hardware brightness confirmation"
 end
 
@@ -203,7 +227,7 @@ function M.status()
     return {
         enabled = M.enabled == true, sourceUUID = M.sourceUUID,
         followerUUID = M.followerUUID, message = M.message,
-        pending = M.pending ~= nil,
+        pending = M.pending ~= nil, lastWrite = M.lastWrite, lastFailure = M.lastFailure,
     }
 end
 
@@ -222,14 +246,19 @@ function M.start(veil)
     assert(type(veil) == "table" and type(veil.menuItems) == "function" and veil.menu,
         "Wallpaper Veil must be running before brightness sync is loaded")
     if M.veil then M.stop() end
-    M.veil, M.originalMenu = veil, veil.menuItems
+    local originalMenu = veil.menuItems
+    M.veil, M.originalMenu = veil, originalMenu
     M.sourceUUID = hs.settings.get(PREFIX .. "sourceUUID")
     M.followerUUID = hs.settings.get(PREFIX .. "followerUUID")
     M.enabled = false
     M.message = "Off: displays can be adjusted independently"
     automaticPair()
-    M.wrapper = function(...)
-        local items = M.originalMenu(...)
+    local wrapper
+    wrapper = function(...)
+        local items = originalMenu(...)
+        -- An outer app menu may retain this closure after stop/restart. Old
+        -- generations pass through their captured menu without adding controls.
+        if M.wrapper ~= wrapper or M.veil ~= veil then return items end
         local insertAt = 2
         for index, item in ipairs(items) do
             if item.title == "Wallpaper tint enabled" then insertAt = index + 1; break end
@@ -243,8 +272,9 @@ function M.start(veil)
         })
         return items
     end
-    veil.menuItems = M.wrapper
-    veil.menu:setMenu(M.wrapper)
+    M.wrapper = wrapper
+    veil.menuItems = wrapper
+    veil.menu:setMenu(wrapper)
     if hs.settings.get(PREFIX .. "enabled") == true then M.setEnabled(true, true) end
     return M
 end
