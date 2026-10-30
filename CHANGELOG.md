@@ -2,6 +2,12 @@
 
 Changes are grouped by release. This project has not published a stable release.
 
+## 0.1.5 preview - 30.10.26
+
+- Separate Startup and Desktop widget controls in App settings, with explicit destinations in System Settings.
+- Read current macOS startup and desktop-control permission state each time the menu opens; distinguish enabled startup from a request waiting for approval.
+- Open the desktop-control privacy pane for both Enable and Manage actions, including when permission is already granted. Name Device Control and Data Access on macOS 27 and Accessibility on earlier systems.
+
 ## 0.1.4 preview - 30.10.26
 
 - Accept a verified universal source-engine build with an explicit archive/manifest receipt and native-source checks. Preserve the official prebuilt input as a separately verified option.

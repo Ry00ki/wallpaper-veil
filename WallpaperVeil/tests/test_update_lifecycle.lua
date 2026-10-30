@@ -21,7 +21,7 @@ local function scenario(mode)
       updateState=live and ((mode=='deadline' and cancelled==0) and 'checking' or (cancelled>0 and 'cancelled' or 'ahead')) or 'idle',
       updateInProgress=live and mode=='deadline' and cancelled==0}
   end
-  local native={showAbout=function() end,closeAbout=function() closed=closed+1 end,
+  local native={openAccessibilitySettings=function() return true end,showAbout=function() end,closeAbout=function() closed=closed+1 end,
     diagnostics=diagnostic,cancelUpdateCheck=function() cancelled=cancelled+1 end,
     checkForUpdates=function() live=true end,
     saveAboutPreview=function()
@@ -37,7 +37,7 @@ local function scenario(mode)
       return {updateState=tag=='v0.1.4-preview.1' and 'current' or 'available',latestTag=tag,
         latestURL='https://github.com/Ry00ki/wallpaper-veil/releases/tag/'..tag}
     end}
-  local env=setmetatable({nativeUI=native,support='/mock',after=after,
+  local env=setmetatable({appSettings={menuItems=function() return {} end},nativeUI=native,support='/mock',after=after,
     os={getenv=function() return '1' end,date=os.date},
     hs={timer={secondsSinceEpoch=function() return now end},json={encode=function(x) return x end},printf=function() end},
     writeReport=function(value,target)
@@ -59,6 +59,7 @@ local function scenario(mode)
   assert(closed>0,'About left open in '..mode)
   if mode=='success' then
     assert(result.ok and cancelled==0,'success was canceled or failed')
+    assert(result.desktopControlSettingsDispatched,'Settings destination was not dispatched')
   else
     assert(not result.ok and cancelled>0,'error not canceled/failed in '..mode)
     assert(result.error and #result.error>0,'terminal cause absent in '..mode)

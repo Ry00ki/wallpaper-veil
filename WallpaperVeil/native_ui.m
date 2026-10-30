@@ -414,6 +414,42 @@ static int WVOpenLoginSettings(lua_State *L) {
     return 1;
 }
 
+static NSString * const WVAccessibilitySettingsURL = @"x-apple.systempreferences:com.apple.settings.PrivacySecurity.extension?Privacy_Accessibility";
+static NSString * const WVLegacyAccessibilitySettingsURL = @"x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility";
+
+static NSString *WVAccessibilityPaneName(void) {
+    return NSProcessInfo.processInfo.operatingSystemVersion.majorVersion >= 27 ?
+        @"Device Control and Data Access" : @"Accessibility";
+}
+
+static int WVAccessibilitySettingsInfo(lua_State *L) {
+    lua_newtable(L);
+    WVSetString(L, "paneName", WVAccessibilityPaneName());
+    WVSetString(L, "url", WVAccessibilitySettingsURL);
+    WVSetString(L, "subjectBundleID", NSBundle.mainBundle.bundleIdentifier);
+    return 1;
+}
+
+static int WVOpenAccessibilitySettings(lua_State *L) {
+    __block BOOL opened = NO;
+    WVOnMain(^{
+        // System Settings owns this route; opening it never grants permission.
+        // Unlike AX's prompt option this works even when already trusted.
+        opened = [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:WVAccessibilitySettingsURL]];
+        if (!opened) opened = [NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:WVLegacyAccessibilitySettingsURL]];
+        if (!opened) {
+            NSAlert *alert = [[NSAlert alloc] init];
+            alert.messageText = @"Open Desktop Control Settings";
+            alert.informativeText = [NSString stringWithFormat:
+                @"Open System Settings → Privacy & Security → %@ to manage Wallpaper Veil's desktop control access.", WVAccessibilityPaneName()];
+            [alert addButtonWithTitle:@"OK"];
+            [alert runModal];
+        }
+    });
+    lua_pushboolean(L, opened);
+    return 1;
+}
+
 static int WVDiagnostics(lua_State *L) {
     __block NSDictionary *values;
     WVOnMain(^{
@@ -465,6 +501,9 @@ static int WVDiagnostics(lua_State *L) {
             @"aboutIconPresent": @(iconPresent), @"updateActionWired": @(updateWired),
             @"releaseActionWired": @(releaseWired), @"updateInProgress": @(WVController.updateTask != nil),
             @"updateDeadlineActive": @(WVController.updateDeadline.isValid),
+            @"desktopControlSettingsPane": WVAccessibilityPaneName(),
+            @"desktopControlSettingsURL": WVAccessibilitySettingsURL,
+            @"desktopControlSubjectBundleID": NSBundle.mainBundle.bundleIdentifier ?: @"",
             @"currentReleaseTag": NSBundle.mainBundle.infoDictionary[@"WVReleaseTag"] ?: @"",
             @"releaseChannel": NSBundle.mainBundle.infoDictionary[@"WVReleaseChannel"] ?: @"",
             @"currentVersion": NSBundle.mainBundle.infoDictionary[@"CFBundleShortVersionString"] ?: @"",
@@ -482,7 +521,7 @@ static int WVDiagnostics(lua_State *L) {
         WVSetBoolean(L, key.UTF8String, [values[key] boolValue]);
     WVSetString(L, "aboutTitle", values[@"aboutTitle"]);
     WVSetString(L, "repositoryURL", values[@"repositoryURL"]);
-    for (NSString *key in @[@"currentReleaseTag", @"releaseChannel", @"currentVersion", @"currentBuild",
+    for (NSString *key in @[@"desktopControlSettingsPane", @"desktopControlSettingsURL", @"desktopControlSubjectBundleID", @"currentReleaseTag", @"releaseChannel", @"currentVersion", @"currentBuild",
         @"updateState", @"updateMessage", @"latestTag", @"latestURL"])
         WVSetString(L, key.UTF8String, values[key]);
     for (NSString *key in @[@"menuItems", @"aboutText", @"aboutButtons"]) {
@@ -566,7 +605,9 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
         {"testUpdateResponse", WVTestUpdateResponse},
         {"saveAboutPreview", WVSaveAboutPreview},
         {"loginStatus", WVLoginStatus}, {"setLaunchAtLogin", WVSetLaunchAtLogin},
-        {"openLoginSettings", WVOpenLoginSettings}, {NULL, NULL}
+        {"openLoginSettings", WVOpenLoginSettings},
+        {"openAccessibilitySettings", WVOpenAccessibilitySettings},
+        {"accessibilitySettingsInfo", WVAccessibilitySettingsInfo}, {NULL, NULL}
     };
     luaL_newlib(L, functions);
     return 1;
