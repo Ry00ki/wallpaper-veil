@@ -1,7 +1,7 @@
-name: Wallpaper Veil preview build
+name: Wallpaper Veil source engine proof
 
-# This expensive macOS job runs only when explicitly dispatched. It does not
-# publish a release, launch the app, or test real display/desktop behaviour.
+# Temporary branch version of the existing manual workflow. Engine artifact
+# only: it does not replace the product build or publish a release.
 on:
   workflow_dispatch:
 
@@ -9,45 +9,195 @@ permissions:
   contents: read
 
 concurrency:
-  group: wallpaper-veil-preview
+  group: wallpaper-veil-source-engine-${{ github.ref }}
   cancel-in-progress: false
 
 jobs:
-  preview:
-    name: Build preview
+  source-engine:
+    if: github.repository == 'Ry00ki/wallpaper-veil' && github.event.repository.private == false
     runs-on: macos-26
     timeout-minutes: 20
+    env:
+      ENGINE_COMMIT: 1469832361b4c3687ec7d589c1b4efe4d3b742ee
+      ENGINE_TAG: 1.1.1
+    defaults:
+      run:
+        shell: bash
     steps:
-      - name: Check out source and history
+      - name: Check out workflow revision and complete source history
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           fetch-depth: 0
           persist-credentials: false
-      - name: Set up Python
-        uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
-        with:
-          python-version: '3.12'
-      - name: Obtain and verify pinned upstream source tag
+
+      - name: Prepare pinned native source in runner temporary storage
         run: |
-          git fetch --no-tags https://github.com/Hammerspoon/hammerspoon.git refs/tags/1.1.1:refs/tags/1.1.1
-          test "$(git rev-parse '1.1.1^{commit}')" = '1469832361b4c3687ec7d589c1b4efe4d3b742ee'
-      - name: Download and verify pinned native runtime
-        run: python WallpaperVeil/ci/fetch_runtime.py --destination "$RUNNER_TEMP/wallpaper-veil-runtime"
-      - name: Compile launcher and UI, then package native runtime
+          set -euo pipefail
+          ENGINE_SOURCE="$RUNNER_TEMP/wallpaper-veil-engine-source"
+          ENGINE_OUTPUT="$RUNNER_TEMP/wallpaper-veil-engine-output"
+          mkdir -p "$ENGINE_OUTPUT"
+          git fetch --no-tags https://github.com/Hammerspoon/hammerspoon.git \
+            "refs/tags/$ENGINE_TAG:refs/tags/$ENGINE_TAG"
+          test "$(git rev-parse "$ENGINE_TAG^{commit}")" = "$ENGINE_COMMIT"
+          git worktree add --detach "$ENGINE_SOURCE" "$ENGINE_COMMIT"
+          test "$(git -C "$ENGINE_SOURCE" describe --tags --abbrev=0)" = "$ENGINE_TAG"
+          cmp "$ENGINE_SOURCE/Podfile.lock" "$ENGINE_SOURCE/Pods/Manifest.lock"
+          test -f "$ENGINE_SOURCE/Pods/Pods.xcodeproj/project.pbxproj"
+          test -f "$ENGINE_SOURCE/LuaSkin/lua-5.4.7/src/lua.h"
+          test "$(git -C "$ENGINE_SOURCE" rev-list HEAD --count)" = 6936
+          xcodebuild -version
+          xcrun --find ibtool
+          xcrun --find actool
+          xcrun --find intentbuilderc
+          {
+            echo "ENGINE_SOURCE=$ENGINE_SOURCE"
+            echo "ENGINE_OUTPUT=$ENGINE_OUTPUT"
+          } >> "$GITHUB_ENV"
+
+      - name: Compile both architectures without release credentials
+        timeout-minutes: 16
         run: |
-          python WallpaperVeil/build_local.py \
-            --runtime "$RUNNER_TEMP/wallpaper-veil-runtime/Hammerspoon.app" \
-            --output "$RUNNER_TEMP/wallpaper-veil-build/Wallpaper Veil.app"
-      - name: Package preview and verify extracted signatures
+          set -euo pipefail
+          cd "$ENGINE_SOURCE"
+          # Direct build avoids upstream's Release/Sentry assertion, archive
+          # export, certificate import, notarization, and symbol upload.
+          # Debug intentionally excludes the prebuilt Sparkle framework.
+          xcodebuild -workspace Hammerspoon.xcworkspace \
+            -scheme Hammerspoon -configuration Debug \
+            -enableAddressSanitizer NO -enableUndefinedBehaviorSanitizer NO \
+            -enableThreadSanitizer NO \
+            -destination 'generic/platform=macOS' \
+            -derivedDataPath "$RUNNER_TEMP/wallpaper-veil-engine-derived" \
+            -jobs 3 \
+            ARCHS='arm64 x86_64' ONLY_ACTIVE_ARCH=NO \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO \
+            CODE_SIGN_IDENTITY= DEVELOPMENT_TEAM= \
+            ENABLE_USER_SCRIPT_SANDBOXING=NO \
+            CLANG_ENABLE_EXPLICIT_MODULES=NO \
+            CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER=NO \
+            COMPILER_INDEX_STORE_ENABLE=NO \
+            build 2>&1 | tee "$ENGINE_OUTPUT/build.log"
+
+      - name: Validate compiled resources, ad hoc sign and package engine
         run: |
-          python WallpaperVeil/ci/package_preview.py \
-            --app "$RUNNER_TEMP/wallpaper-veil-build/Wallpaper Veil.app" \
-            --destination "$RUNNER_TEMP/wallpaper-veil-artifacts"
-      - name: Upload preview artifacts
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib, json, os, plistlib, shutil, subprocess
+          from pathlib import Path
+
+          source = Path(os.environ['ENGINE_SOURCE'])
+          output = Path(os.environ['ENGINE_OUTPUT'])
+          products = Path(os.environ['RUNNER_TEMP']) / 'wallpaper-veil-engine-derived/Build/Products/Debug'
+          app = products / 'Hammerspoon.app'
+          def run(*args):
+              return subprocess.check_output([str(a) for a in args], text=True).strip()
+          def digest(path):
+              return hashlib.sha256(path.read_bytes()).hexdigest()
+
+          info = plistlib.loads((app / 'Contents/Info.plist').read_bytes())
+          assert info['CFBundleIdentifier'] == 'org.hammerspoon.Hammerspoon'
+          assert info['CFBundleShortVersionString'] == '1.1.1'
+          assert str(info['CFBundleVersion']) == '6936'
+          assert (source / 'Hammerspoon/secrets.h').read_bytes().strip() == b''
+          assert not (app / 'Contents/Frameworks/Sparkle.framework').exists()
+          resources = app / 'Contents/Resources'
+          for name in ['MainMenu.nib', 'PreferencesWindow.nib', 'ConsoleWindow.nib',
+                       'HSChooserWindow.nib', 'setup.lua', 'docs.json']:
+              assert (resources / name).exists(), name
+          frameworks = app / 'Contents/Frameworks'
+          for name in ['libscreen.dylib', 'libscreenwatcher.dylib', 'libcanvas.dylib',
+                       'libmenubar.dylib', 'libsettings.dylib']:
+              assert (frameworks / 'hs' / name).is_file(), name
+          assert (frameworks / 'LuaSkin.framework/LuaSkin').is_file()
+
+          # Retain upstream/component legal notices in this diagnostic artifact.
+          notices = resources / 'Acknowledgements/SourceEngine'
+          shutil.copytree(source / 'Pods/Target Support Files/Pods-Hammerspoon',
+                          notices / 'Pods', ignore=lambda d, ns: [n for n in ns if 'acknowledgements' not in n])
+          shutil.copy2(source / 'LICENSE', notices / 'Hammerspoon-MIT.txt')
+          notice_roots = ['extensions', 'LuaSkin', 'Pods']
+          stems = ['LICENSE', 'LICENCE', 'COPYING', 'COPYRIGHT', 'NOTICE', 'UNLICENSE']
+          legal_files = []
+          for root in notice_roots:
+              for path in (source / root).rglob('*'):
+                  upper = path.name.upper()
+                  conventional = any(upper == s or any(upper.startswith(s + c) for c in '.-_') for s in stems)
+                  lua_notice = path == source / 'LuaSkin/lua-5.4.7/doc/readme.html'
+                  if path.is_file() and not path.is_symlink() and (conventional or lua_notice):
+                      relative = path.relative_to(source)
+                      target = notices / 'Components' / relative
+                      target.parent.mkdir(parents=True, exist_ok=True)
+                      shutil.copy2(path, target)
+                      legal_files.append({'path': relative.as_posix(), 'sha256': digest(path)})
+
+          # Sign leaf Mach-O files before framework/app containers. No identity,
+          # entitlement, provisioning profile, keychain or paid account is used.
+          magic = {bytes.fromhex(x) for x in ['feedface','cefaedfe','feedfacf','cffaedfe',
+                                             'cafebabe','bebafeca','cafebabf','bfbafeca']}
+          binaries = []
+          for path in app.rglob('*'):
+              if path.is_file() and not path.is_symlink():
+                  with path.open('rb') as stream:
+                      if stream.read(4) in magic:
+                          binaries.append(path)
+          for path in sorted(binaries, key=lambda p: -len(p.parts)):
+              run('/usr/bin/codesign', '--force', '--sign', '-', '--timestamp=none', path)
+          containers = [p for p in app.rglob('*') if p.is_dir() and not p.is_symlink()
+                        and p.suffix in {'.framework', '.app', '.xpc'}]
+          for path in sorted(containers, key=lambda p: -len(p.parts)) + [app]:
+              run('/usr/bin/codesign', '--force', '--sign', '-', '--timestamp=none', path)
+          run('/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', app)
+
+          executable = app / 'Contents/MacOS' / info['CFBundleExecutable']
+          architectures = run('/usr/bin/lipo', '-archs', executable).split()
+          assert set(architectures) == {'arm64', 'x86_64'}, architectures
+          for path in binaries:
+              assert set(run('/usr/bin/lipo', '-archs', path).split()) == {'arm64', 'x86_64'}, path.relative_to(app)
+          archive = output / 'wallpaper-veil-source-engine.zip'
+          run('/usr/bin/ditto', '-c', '-k', '--keepParent', '--norsrc', '--noextattr', app, archive)
+          extracted = output / 'extracted-check'
+          run('/usr/bin/ditto', '-x', '-k', archive, extracted)
+          run('/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', extracted / app.name)
+          shutil.rmtree(extracted)
+          manifest = {
+              'schema': 1, 'kind': 'source-built-native-engine-proof',
+              'productIntegrated': False, 'runtimeLaunched': False, 'configuration': 'Debug',
+              'sanitizers': False, 'explicitClangModules': False,
+              'compatibilitySettings': {'CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER': 'NO'},
+              'upstreamCommit': os.environ['ENGINE_COMMIT'],
+              'nativeCodeHead': run('/usr/bin/git', '-C', source, 'rev-parse', 'HEAD'),
+              'workflowCommit': os.environ['GITHUB_SHA'],
+              'upstreamTag': os.environ['ENGINE_TAG'], 'signing': 'ad-hoc',
+              'telemetryDSNCompiled': False, 'updaterFrameworkIncluded': False,
+              'engine': {'sha256': digest(executable), 'architectures': architectures,
+                         'bundleID': info['CFBundleIdentifier'],
+                         'version': info['CFBundleShortVersionString'], 'build': str(info['CFBundleVersion'])},
+              'toolchain': {'xcode': run('/usr/bin/xcodebuild', '-version'),
+                            'sdk': run('/usr/bin/xcrun', '--sdk', 'macosx', '--show-sdk-version'),
+                            'clang': run('/usr/bin/xcrun', 'clang', '--version'),
+                            'hostArchitecture': run('/usr/bin/uname', '-m')},
+              'compiledMachOCount': len(binaries), 'componentLegalNotices': sorted(legal_files, key=lambda v: v['path']),
+              'archive': {'name': archive.name, 'sha256': digest(archive), 'bytes': archive.stat().st_size},
+              'qualification': ['source compilation', 'both architectures', 'compiled nib resources',
+                                'empty telemetry header', 'deep strict ad-hoc signature', 'extracted archive signature'],
+              'pendingQualification': ['Wallpaper Veil builder provenance adapter', 'local application startup',
+                                       'existing application acceptance and UI checks']
+          }
+          (output / 'source-engine-manifest.json').write_text(json.dumps(manifest, indent=2) + '\n')
+          (output / (archive.name + '.sha256')).write_text(digest(archive) + '  ' + archive.name + '\n')
+          print(json.dumps({k: manifest[k] for k in ['kind', 'nativeCodeHead', 'engine', 'compiledMachOCount']}))
+          PY
+
+      - name: Retain engine proof and diagnostic log
+        if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: wallpaper-veil-preview-${{ github.sha }}
-          path: ${{ runner.temp }}/wallpaper-veil-artifacts/*
-          if-no-files-found: error
+          name: wallpaper-veil-source-engine-${{ github.run_id }}
+          path: |
+            ${{ runner.temp }}/wallpaper-veil-engine-output/*.zip
+            ${{ runner.temp }}/wallpaper-veil-engine-output/*.json
+            ${{ runner.temp }}/wallpaper-veil-engine-output/*.sha256
+            ${{ runner.temp }}/wallpaper-veil-engine-output/build.log
+          if-no-files-found: warn
           retention-days: 14
           compression-level: 0
