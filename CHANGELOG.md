@@ -6,6 +6,8 @@ Changes are grouped by release. This project has not published a stable release.
 
 ### Added
 
+- Explicit MIT licensing for Wallpaper Veil code, preserved upstream MIT notice and bundled third-party licence notices.
+
 - Wallpaper Veil standalone local prototype based on Hammerspoon 1.1.1.
 - Compiled Objective-C launcher using NSWorkspace to start a bundled native runtime app.
 - App-owned Lua startup, independent preferences and native Application Support state.

@@ -172,12 +172,20 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
         (resources / "setup.lua").write_text(bundled_setup(old_setup))
         acknowledgements = resources / "Acknowledgements"
         acknowledgements.mkdir()
-        for name in ["LICENSE", "CREDITS.md",
-                     "Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.markdown",
-                     "Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.plist"]:
+        for name, target_name in [
+            ("LICENSE", "LICENSE"), ("CREDITS.md", "CREDITS.md"),
+            ("LICENSES/Hammerspoon-MIT.txt", "Hammerspoon-MIT.txt"),
+            ("WallpaperVeil/LICENSE", "Wallpaper-Veil-MIT.txt"),
+            ("THIRD_PARTY_NOTICES.md", "THIRD_PARTY_NOTICES.md"),
+            ("Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.markdown",
+             "Pods-Hammerspoon-acknowledgements.markdown"),
+            ("Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.plist",
+             "Pods-Hammerspoon-acknowledgements.plist"),
+        ]:
             path = project / name
-            if path.is_file():
-                shutil.copy2(path, acknowledgements / path.name)
+            if not path.is_file():
+                raise RuntimeError(f"Required licence or credit file is missing: {name}")
+            shutil.copy2(path, acknowledgements / target_name)
         removed_login_helpers = []
         login_items = runtime_contents / "Library/LoginItems"
         if login_items.exists():

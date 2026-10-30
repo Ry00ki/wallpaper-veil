@@ -61,3 +61,7 @@ runtime.pid
 *.p12
 *.pfx
 *.key
+
+*.p8
+*.keychain*
+!.env.example
