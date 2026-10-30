@@ -58,7 +58,7 @@ local ok, failure = xpcall(function()
     assert(not package.path:find(".hammerspoon", 1, true), "External configuration search path")
     assert(not package.path:find("/.local/share/", 1, true), "External user module search path")
     for _, name in ipairs({"wallpaper_veil", "display_brightness_sync", "desktop_widgets",
-        "desktop_widget_clock", "desktop_widget_panel", "runtime_probe", "acceptance"}) do
+        "desktop_widget_clock", "desktop_widget_panel", "runtime_probe", "acceptance", "app_settings"}) do
         assert(loadfile(code .. "/" .. name .. ".lua"))
     end
     for _, name in ipairs({"wallpaper_veil", "display_brightness_sync", "desktop_widgets",
@@ -74,24 +74,12 @@ local ok, failure = xpcall(function()
     wallpaperVeil.start()
     displayBrightnessSync = require("display_brightness_sync")
     displayBrightnessSync.start(wallpaperVeil)
+    local appSettings = require("app_settings")
     local baseMenu = wallpaperVeil.menuItems
     wallpaperVeil.menuItems = function(...)
         local items = baseMenu(...)
         items[#items+1] = {title="-"}
-        local login = nativeUI.loginStatus()
-        local settings = {
-            {title="Launch at login", checked=login.registered, disabled=not login.ok,
-                fn=function() nativeUI.setLaunchAtLogin(not login.registered) end},
-            {title="Login Items settings…", fn=nativeUI.openLoginSettings},
-            {title="-"},
-            {title=hs.accessibilityState(false) and "Accessibility allowed" or "Widget automation needs Accessibility", disabled=true},
-            {title="Allow Accessibility…", fn=function() hs.accessibilityState(true) end},
-        }
-        if login.requiresApproval then
-            table.insert(settings, 2, {title="Approval needed in Login Items settings", disabled=true})
-        elseif not login.ok then
-            table.insert(settings, 2, {title="Login setting unavailable", disabled=true})
-        end
+        local settings = appSettings.menuItems(nativeUI)
         items[#items+1] = {title="App settings", menu=settings}
         items[#items+1] = {title="Quit Wallpaper Veil", fn=quit}
         items[#items+1] = {title="About Wallpaper Veil", fn=function()
@@ -160,6 +148,11 @@ local ok, failure = xpcall(function()
                             ui.updateActionWired and ui.releaseActionWired and
                             ui.currentVersion ~= "" and ui.currentBuild ~= "" and ui.currentReleaseTag ~= ""
                         ui.captureError = why
+                        ui.appSettings = {}
+                        for _, item in ipairs(appSettings.menuItems(nativeUI)) do
+                            ui.appSettings[#ui.appSettings+1] = {title=item.title, checked=item.checked,
+                                disabled=item.disabled, hasAction=type(item.fn)=="function"}
+                        end
                         local function release(tag)
                             return {tag_name=tag, draft=false, prerelease=tag:find("-preview.", 1, true) ~= nil,
                                 html_url="https://github.com/Ry00ki/wallpaper-veil/releases/tag/" .. tag}
@@ -207,6 +200,9 @@ local ok, failure = xpcall(function()
                                 local saved, why = nativeUI.saveAboutPreview(support .. "/about-update-preview.png")
                                 assert(saved, why or "The update-check About view could not be captured.")
                                 result.previewSaved = true
+                                -- Opening this pane is a non-mutating feature check.
+                                -- macOS approval remains a separate user action.
+                                result.desktopControlSettingsDispatched = nativeUI.openAccessibilitySettings()
                                 writeReport(result, support .. "/update-check.json")
                                 after(1, function()
                                     local closed, failure = pcall(nativeUI.closeAbout)
