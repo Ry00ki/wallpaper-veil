@@ -97,7 +97,9 @@ def sign_bundle(app: Path) -> None:
         with path.open("rb") as stream:
             if stream.read(4) in magic:
                 binaries.append(path)
-    for path in sorted(binaries, key=lambda p: len(p.parts), reverse=True):
+    # Main executables also seal their app containers. Sign every nested
+    # library first, including app-owned modules at the same directory depth.
+    for path in sorted(binaries, key=lambda p: (p.name in {"WallpaperVeil", "WallpaperVeilRuntime"}, -len(p.parts))):
         args = ["/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none"]
         if path.name == "WallpaperVeilRuntime":
             args += ["--identifier", APP_ID]
@@ -110,6 +112,60 @@ def sign_bundle(app: Path) -> None:
         run("/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(path))
     run("/usr/bin/codesign", "--force", "--sign", "-", "--timestamp=none", str(app))
     run("/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app))
+
+
+# Add this function beside the existing builder helpers. Path, shutil and the
+# existing sha256(path) helper are already imported/defined in build_local.py.
+def bundle_component_notices(project: Path, acknowledgements: Path) -> dict:
+    """Copy vendor legal files byte-for-byte, preserving source-relative paths."""
+    roots = ("extensions", "LuaSkin", "Pods")
+    stems = ("LICENSE", "LICENCE", "COPYING", "COPYRIGHT", "NOTICE", "UNLICENSE")
+    def conventional_name(name: str) -> bool:
+        upper = name.upper()
+        return any(upper == stem or any(upper.startswith(stem + separator)
+                   for separator in (".", "-", "_")) for stem in stems)
+
+    files = set()
+    for prefix in roots:
+        directory = project / prefix
+        if not directory.is_dir():
+            raise RuntimeError(f"Required component source directory missing: {prefix}")
+        for source in directory.rglob("*"):
+            if source.is_file() and not source.is_symlink() and conventional_name(source.name):
+                files.add(source)
+
+    # Upstream Lua's complete licence lives in this documentation page, not a
+    # conventional LICENSE file. Do not substitute a copy of its source headers.
+    lua_legal = project / "LuaSkin/lua-5.4.7/doc/readme.html"
+    if not lua_legal.is_file() or lua_legal.is_symlink():
+        raise RuntimeError("Audited Lua 5.4.7 legal documentation is missing")
+    files.add(lua_legal)
+    required = (
+        "extensions/menubar/LICENSE",
+        "extensions/screen/LICENSE",
+        "extensions/httpserver/LICENSE.timeout3",
+        "extensions/network/ping/LICENSE.SimplePing",
+        "extensions/mouse/manymouse/LICENSE.txt",
+        "Pods/Sentry/LICENSE.md",
+        "Pods/SocketRocket/LICENSE-examples",
+        "Pods/Sparkle/LICENSE",
+    )
+    for relative in required:
+        if project / relative not in files:
+            raise RuntimeError(f"Required component legal notice missing: {relative}")
+
+    destination = acknowledgements / "Components"
+    counts = {prefix: 0 for prefix in roots}
+    manifest = []
+    for source in sorted(files):
+        relative = source.relative_to(project)
+        target = destination / relative
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, target)
+        counts[relative.parts[0]] += 1
+        manifest.append({"path": relative.as_posix(), "sha256": sha256(target)})
+    return {"counts": counts, "total": len(manifest), "files": manifest}
+
 
 
 def build(output: Path, runtime: Path, own: Path) -> dict:
@@ -186,19 +242,22 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             if not path.is_file():
                 raise RuntimeError(f"Required licence or credit file is missing: {name}")
             shutil.copy2(path, acknowledgements / target_name)
+        component_notices = bundle_component_notices(project, acknowledgements)
         removed_login_helpers = []
         login_items = runtime_contents / "Library/LoginItems"
         if login_items.exists():
             removed_login_helpers = [str(p.relative_to(runtime_contents)) for p in login_items.iterdir()]
             shutil.rmtree(login_items)
         info = dict(original_info)
+        info.pop("CFBundleIconName", None)
         for key in ["CFBundleDocumentTypes", "CFBundleURLTypes", "NSServices", "UTExportedTypeDeclarations",
                     "UTImportedTypeDeclarations", "INIntentsSupported", "NSUserActivityTypes", "OSAScriptingDefinition",
                     "SUFeedURL", "SUScheduledCheckInterval", "SUPublicEDKey", "NSAppTransportSecurity",
                     "NSCameraUsageDescription", "NSMicrophoneUsageDescription", "NSLocationAlwaysUsageDescription"]:
             info.pop(key, None)
         info.update({"CFBundleIdentifier": APP_ID, "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "1",
+                     "CFBundleExecutable": "WallpaperVeilRuntime", "CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "2",
+                     "CFBundleIconFile": "WallpaperVeil.icns",
                      "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
                      "NSAppleScriptEnabled": False, "SUEnableAutomaticChecks": False,
                      "SUAllowsAutomaticUpdates": False, "SUAutomaticallyUpdate": False, "SUSendProfileInfo": False,
@@ -213,36 +272,44 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
             "CFBundleDevelopmentRegion": "en", "CFBundleInfoDictionaryVersion": "6.0",
             "CFBundlePackageType": "APPL", "CFBundleIdentifier": LAUNCHER_ID,
             "CFBundleName": APP_NAME, "CFBundleDisplayName": APP_NAME,
-            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.0", "CFBundleVersion": "1",
+            "CFBundleExecutable": "WallpaperVeil", "CFBundleShortVersionString": "0.1.1", "CFBundleVersion": "2",
             "LSUIElement": True, "LSMinimumSystemVersion": original_info.get("LSMinimumSystemVersion", "13.0"),
             "LSApplicationCategoryType": "public.app-category.utilities", "NSPrincipalClass": "NSApplication",
             "NSHumanReadableCopyright": info["NSHumanReadableCopyright"],
             "WVPrototypeType": info["WVPrototypeType"], "WVRuntimeBundleIdentifier": APP_ID,
             "WVRuntimeRelativePath": HELPER_RELATIVE_PATH,
         }
-        icon = resources / "AppIcon.icns"
-        if icon.is_file():
-            shutil.copy2(icon, outer_resources / icon.name)
-            outer_info["CFBundleIconFile"] = "AppIcon"
+        icon = own / "assets/WallpaperVeil.icns"
+        if not icon.is_file():
+            raise RuntimeError("The original Wallpaper Veil app icon is missing")
+        for destination in (resources, outer_resources):
+            shutil.copy2(icon, destination / icon.name)
+        outer_info["CFBundleIconFile"] = "WallpaperVeil.icns"
         with (contents / "Info.plist").open("wb") as stream:
             plistlib.dump(outer_info, stream)
         clang = run("/usr/bin/xcrun", "--find", "clang", capture=True)
         sdk = run("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path", capture=True)
         run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=13.0",
             "-framework", "Foundation", "-framework", "AppKit", str(own / "launcher.m"), "-o", str(macos / "WallpaperVeil"))
+        run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64",
+            "-mmacosx-version-min=13.0", "-bundle", "-undefined", "dynamic_lookup",
+            "-I", str(project / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit",
+            str(own / "native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
         provenance = {
-            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.0", "build": "1",
+            "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": "0.1.1", "build": "2",
             "built_at_utc": dt.datetime.now(dt.timezone.utc).isoformat(),
             "type": "private binary-runtime prototype with NSWorkspace launcher and nested native application",
             "runtime_relative_path": HELPER_RELATIVE_PATH,
             "launch_method": "NSWorkspace.openApplicationAtURL with early arguments and controlled WV environment",
             "launcher_is_permanent_supervisor": False,
-            "engine_recompiled_from_source": False, "launcher_recompiled_from_source": True,
+            "engine_recompiled_from_source": False, "launcher_recompiled_from_source": True, "ui_recompiled_from_source": True,
             "source": source,
             "runtime": {"input_bundle_name": runtime.name, "version": RUNTIME_VERSION, "build": RUNTIME_BUILD,
                         "original_engine_sha256": sha256(runtime / "Contents/MacOS" / original_info["CFBundleExecutable"]),
                         "original_setup_sha256": hashlib.sha256(old_setup.encode()).hexdigest()},
-            "source_hashes": {"launcher.m": sha256(own / "launcher.m"), "build_local.py": sha256(Path(__file__))},
+            "source_hashes": {"launcher.m": sha256(own / "launcher.m"), "build_local.py": sha256(Path(__file__)),
+                              "native_ui.m": sha256(own / "native_ui.m"), "WallpaperVeil.icns": sha256(icon)},
+            "component_notices": component_notices,
             "bundled_lua_hashes": code_hashes,
             "bundled_setup_sha256": sha256(resources / "setup.lua"),
             "launcher_architectures": run("/usr/bin/lipo", "-archs", str(macos / "WallpaperVeil"), capture=True),
@@ -282,7 +349,7 @@ def build(output: Path, runtime: Path, own: Path) -> dict:
 def main() -> int:
     own = Path(__file__).resolve().parent
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--output", type=Path, default=own.parent.parent / "build/Wallpaper Veil.app")
+    parser.add_argument("--output", type=Path, default=own.parent.parent / "build.noindex/Wallpaper Veil.app")
     parser.add_argument("--runtime", type=Path, required=True,
                         help="Verified Hammerspoon 1.1.1 runtime input; use ci/fetch_runtime.py to obtain it")
     args = parser.parse_args()

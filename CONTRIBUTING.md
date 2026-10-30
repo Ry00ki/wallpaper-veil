@@ -4,10 +4,11 @@ Wallpaper Veil is currently an experimental local prototype. Keep contributions 
 
 ## Getting started
 
-Read the [README](README.md) for the current architecture and local build recipe. The repository retains Hammerspoon source history, while the prototype builder currently compiles only the Wallpaper Veil launcher and packages a matching prebuilt engine. Do not describe a launcher-only change as a complete engine rebuild.
+Read the [README](README.md) for the current architecture and local build recipe. The repository retains Hammerspoon source history, while the prototype builder currently compiles the Wallpaper Veil launcher and native UI module and packages a matching prebuilt engine. Do not describe a launcher-only change as a complete engine rebuild.
 
 Useful areas:
 
+- `WallpaperVeil/native_ui.m`: app-owned About, menus and scoped engine-window suppression.
 - `WallpaperVeil/launcher.m`: native app startup and state-directory handling.
 - `WallpaperVeil/build_local.py`: packaging, identity and local signing.
 - `WallpaperVeil/app/`: application startup, menus and features.

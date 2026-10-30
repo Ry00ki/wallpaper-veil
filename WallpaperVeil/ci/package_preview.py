@@ -55,6 +55,7 @@ def package(app: Path, destination: Path) -> Path:
         'project': 'Wallpaper Veil', 'archive': archive.name, 'sha256': digest,
         'extracted_signatures_verified': True, 'app_launched': False,
         'engine_recompiled_from_source': False, 'launcher_recompiled_from_source': True,
+        'ui_recompiled_from_source': True,
         'distribution': 'Private local preview, ad hoc signed; not notarized or App Store approved',
     }
     (destination / 'wallpaper-veil-package.json').write_text(json.dumps(summary, indent=2) + '\n')

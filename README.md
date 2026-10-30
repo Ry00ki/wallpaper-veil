@@ -2,7 +2,7 @@
 
 Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
 
-This repository contains an experimental standalone-app prototype based on Hammerspoon 1.1.1. The current build compiles Wallpaper Veil's launcher and bundles the matching prebuilt Hammerspoon engine with app-owned Lua code. It does not yet rebuild the complete native engine from this source fork.
+This repository contains an experimental standalone-app prototype based on Hammerspoon 1.1.1. The current build compiles Wallpaper Veil's launcher and native UI bridge, and bundles the matching prebuilt Hammerspoon engine with app-owned Lua code. It does not yet rebuild the complete native engine from this source fork.
 
 ## Features and status
 
@@ -16,7 +16,7 @@ The prototype is for local evaluation. Hardware-brightness changes can fail or b
 
 ## How it runs
 
-The app has a small Objective-C launcher and a nested native runtime app. The launcher uses NSWorkspace to start that runtime with controlled app-code and state paths, then exits. It is not a permanent background supervisor.
+The app has a small Objective-C launcher, an app-owned Cocoa UI module and a nested native runtime app. The UI module provides the About window, repository/notices buttons and native app menu, and keeps inherited engine preferences/console windows outside normal product use. The launcher uses NSWorkspace to start that runtime with controlled app-code and state paths, then exits. It is not a permanent background supervisor.
 
 Executable code and native modules live inside the completed app bundle. Writable state lives in `~/Library/Application Support/Wallpaper Veil`, with an independent macOS preferences domain. Once built, the app does not need the source checkout, Python or a separately installed Hammerspoon to run.
 
@@ -47,21 +47,33 @@ git fetch --no-tags https://github.com/Hammerspoon/hammerspoon.git refs/tags/1.1
 python3 WallpaperVeil/ci/fetch_runtime.py --destination "$TMPDIR/wallpaper-veil-runtime"
 python3 WallpaperVeil/build_local.py \
   --runtime "$TMPDIR/wallpaper-veil-runtime/Hammerspoon.app" \
-  --output "$PWD/build/Wallpaper Veil.app"
+  --output "$HOME/Developer/Wallpaper Veil/build.noindex/Wallpaper Veil.app"
 ```
 
-Supply `--runtime` explicitly. It can point to the matching bundle elsewhere; the repository's pinned runtime-fetch helper is `WallpaperVeil/ci/fetch_runtime.py`. Check that helper's options before choosing a download location. The builder compiles the launcher, packages the engine and Lua, retains acknowledgements, signs the bundle ad hoc and verifies its signature. It does not launch the app or change the source engine installation.
+Supply `--runtime` explicitly. It can point to the matching bundle elsewhere; the repository's pinned runtime-fetch helper is `WallpaperVeil/ci/fetch_runtime.py`. Check that helper's options before choosing a download location. The builder compiles the launcher and native UI module, packages the engine and Lua, retains acknowledgements, signs the bundle ad hoc and verifies its signature. It does not launch the app or change the source engine installation.
 
 **Ad hoc signed** means locally signed without a Developer ID identity. This build is not notarized and is not a distribution-ready release.
 
 A complete engine rebuild is a separate workflow requiring the upstream Xcode workspace and dependencies. See [the preserved upstream README](UPSTREAM_README.md) and [upstream contribution guidance](https://github.com/Hammerspoon/hammerspoon/blob/master/CONTRIBUTING.md).
+
+## Install one canonical app
+
+For the helper's default local layout, close the running Wallpaper Veil, then run:
+
+```sh
+python3 WallpaperVeil/handoff.py install
+python3 WallpaperVeil/handoff.py preflight
+open "$HOME/Applications/Wallpaper Veil.app"
+```
+
+The installer preserves an existing app as a verified ZIP, installs the new bundle and removes its expanded development build copy. Use the app in Applications as the canonical installation. Development output belongs under `build.noindex`, and recovery copies remain ZIPs, so app search does not accumulate launchable copies.
 
 ## Launch and check
 
 Close any other Wallpaper Veil copy before verification:
 
 ```sh
-open "$PWD/build/Wallpaper Veil.app" --args --verify-only
+open "$HOME/Developer/Wallpaper Veil/build.noindex/Wallpaper Veil.app" --args --verify-only
 ```
 
 Verification-only checks identity, isolated settings/code paths and application Lua syntax, then exits. It does not run the hardware-brightness acceptance sequence.
@@ -69,10 +81,10 @@ Verification-only checks identity, isolated settings/code paths and application 
 Before normal launch, stop an existing Hammerspoon-based veil to avoid duplicate overlays. Then open the built app:
 
 ```sh
-open "$PWD/build/Wallpaper Veil.app"
+open "$HOME/Developer/Wallpaper Veil/build.noindex/Wallpaper Veil.app"
 ```
 
-Use its menu-bar item to adjust the tint or quit. About Wallpaper Veil is the final menu item. macOS Accessibility approval is needed for the optional widget/clock automation; tint controls do not require that approval.
+Use its menu-bar item to adjust the tint or quit. About Wallpaper Veil is the final menu item and opens an app-owned window with an Open GitHub Repository button pointing to this repository, plus access to bundled licence notices. macOS Accessibility approval is needed for the optional widget/clock automation; tint controls do not require that approval.
 
 The current `handoff.py` is a local development helper with fixed default development and installation paths. Inspect its constants and recovery behavior before using it on another setup. Its handoff/self-test modes may stop a matching legacy process and make small temporary hardware-brightness changes. They are active acceptance tests, not passive diagnostics. Prefer a verified previous Wallpaper Veil bundle for recovery. Restoring an older Hammerspoon setup requires that app to be present and validated first; do not assume it remains installed. A single successful run does not establish reliability across displays or macOS versions.
 

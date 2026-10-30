@@ -8,12 +8,14 @@ import os
 from pathlib import Path
 import plistlib
 import signal
+import shutil
+from archive_app import archive_app
 import subprocess
 import time
 import uuid
 
 PROJECT = Path.home() / 'Developer/Wallpaper Veil'
-BUILT = PROJECT / 'build/Wallpaper Veil.app'
+BUILT = PROJECT / 'build.noindex/Wallpaper Veil.app'
 APP = Path.home() / 'Applications/Wallpaper Veil.app'
 SUPPORT = Path.home() / 'Library/Application Support/Wallpaper Veil'
 STOCK = Path('/Applications/Hammerspoon.app')
@@ -79,11 +81,23 @@ def install():
         marker=APP/'Contents/Resources/wallpaper-veil-build.json'
         if not marker.is_file() or json.loads(marker.read_text()).get('bundle_id') not in {APP_ID,APP_ID+'.launcher'}:
             raise RuntimeError('Refusing to replace an unrecognised existing app')
-        backup=PROJECT/'backups'/f'Wallpaper Veil-{int(time.time())}.app'
-        backup.parent.mkdir(mode=0o700,parents=True,exist_ok=True);APP.rename(backup)
-    stage.rename(APP)
-    run(['/usr/bin/codesign','--verify','--deep','--strict',APP],capture_output=True)
-    return {'installedApp':str(APP),'buildApp':str(BUILT),'signatureVerified':True}
+        backup=PROJECT/'backups'/f'Wallpaper Veil-{int(time.time())}.app.zip'
+        backup.parent.mkdir(mode=0o700,parents=True,exist_ok=True)
+        archive_app(APP,backup)
+    else:
+        backup=None
+    run(['/usr/bin/codesign','--verify','--deep','--strict',stage],capture_output=True)
+    previous=APP.parent/f'.WallpaperVeil-previous-{uuid.uuid4().hex}'
+    if APP.exists(): APP.rename(previous)
+    try:
+        stage.rename(APP)
+    except BaseException:
+        if previous.exists(): previous.rename(APP)
+        raise
+    if previous.exists(): shutil.rmtree(previous)
+    shutil.rmtree(BUILT)
+    return {'installedApp':str(APP),'buildApp':str(BUILT),'signatureVerified':True,
+            'previousAppArchive':str(backup) if backup else None,'buildCopyRemoved':True}
 
 def preflight():
     if own_pid(): raise RuntimeError('A Wallpaper Veil is already running')

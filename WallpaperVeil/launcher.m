@@ -70,13 +70,14 @@ static void migratePreferences(void) {
 int main(int argc, const char *argv[]) {
     @autoreleasepool {
         umask(0077);
-        BOOL verifyOnly = NO, selfTest = NO;
+        BOOL verifyOnly = NO, selfTest = NO, uiTest = NO;
         for (int i = 1; i < argc; i++) {
             if (strcmp(argv[i], "--verify-only") == 0) verifyOnly = YES;
             else if (strcmp(argv[i], "--self-test") == 0) selfTest = YES;
-            else if (strncmp(argv[i], "-psn_", 5) != 0) fail(@"Supported options: --verify-only, --self-test", 64);
+            else if (strcmp(argv[i], "--ui-test") == 0) uiTest = YES;
+            else if (strncmp(argv[i], "-psn_", 5) != 0) fail(@"Supported options: --verify-only, --self-test, --ui-test", 64);
         }
-        if (verifyOnly && selfTest) fail(@"Choose either --verify-only or --self-test", 64);
+        if ((int)verifyOnly + (int)selfTest + (int)uiTest > 1) fail(@"Choose one verification mode", 64);
         NSBundle *bundle = NSBundle.mainBundle;
         if (![bundle.bundleIdentifier isEqualToString:@"com.ry00ki.wallpaperveil.launcher"]) {
             fail(@"Start the launcher inside the completed Wallpaper Veil.app bundle", 78);
@@ -107,7 +108,7 @@ int main(int argc, const char *argv[]) {
         }
         for (NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:WVBundleID]) {
             if (app.terminated) continue;
-            if (verifyOnly || selfTest) fail(@"Close Wallpaper Veil before running verification or self-test", 75);
+            if (verifyOnly || selfTest || uiTest) fail(@"Close Wallpaper Veil before running verification or self-test", 75);
             if (![app.bundleURL.URLByStandardizingPath isEqual:helperURL.URLByStandardizingPath]) {
                 fail(@"A different Wallpaper Veil runtime is already running; quit it before this version", 75);
             }
@@ -127,7 +128,8 @@ int main(int argc, const char *argv[]) {
             @"WV_APP_CODE": code,
             @"WV_APPLICATION_SUPPORT": support,
             @"WV_VERIFY_ONLY": verifyOnly ? @"1" : @"0",
-            @"WV_SELF_TEST": selfTest ? @"1" : @"0"
+            @"WV_SELF_TEST": selfTest ? @"1" : @"0",
+            @"WV_UI_TEST": uiTest ? @"1" : @"0"
         };
         configuration.arguments = @[
             @"-MJConfigFile", [runtime stringByAppendingPathComponent:@"init.lua"],

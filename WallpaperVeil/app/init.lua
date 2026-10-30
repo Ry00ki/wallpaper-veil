@@ -35,6 +35,10 @@ hs.dockIcon(false)
 local ok, failure = xpcall(function()
     assert(hs.processInfo.bundleID == bundleID, "Incorrect application identity")
     assert(hs.settings.bundleID == bundleID, "Incorrect settings domain")
+    local openUI = assert(package.loadlib(hs.processInfo.resourcePath ..
+        "/../Frameworks/libWallpaperVeilUI.dylib", "luaopen_wallpaperveil_ui"))
+    local nativeUI = openUI()
+    assert(nativeUI.configure().configured, "App-owned native UI did not configure")
     assert(not package.path:find(".hammerspoon", 1, true), "External configuration search path")
     assert(not package.path:find("/.local/share/", 1, true), "External user module search path")
     for _, name in ipairs({"wallpaper_veil", "display_brightness_sync", "desktop_widgets",
@@ -57,7 +61,7 @@ local ok, failure = xpcall(function()
         items[#items+1] = {title="-"}
         items[#items+1] = {title="Quit Wallpaper Veil", fn=quit}
         items[#items+1] = {title="About Wallpaper Veil", fn=function()
-            hs.dialog.blockAlert("Wallpaper Veil", "Version 0.1.0\nPrivate standalone preview\nIncludes Hammerspoon 1.1.1 under the MIT licence.", "OK")
+            nativeUI.showAbout()
         end}
         return items
     end
@@ -84,7 +88,8 @@ local ok, failure = xpcall(function()
         probe.menuBar={inMenuBar=wallpaperVeil.menu:isInMenuBar(),
             title=wallpaperVeil.menu:title(),frame=frame and {x=frame.x,y=frame.y,w=frame.w,h=frame.h} or nil}
         -- macOS 27 can remotely host status items; frame is diagnostic only.
-        probe.appVersion = "0.1.0"
+        probe.appVersion = "0.1.1"
+        probe.nativeUI = nativeUI.diagnostics()
         probe.prototype = "Bundled upstream native runtime with app-owned launcher and Lua"
         writeReport(probe)
     end
@@ -92,6 +97,34 @@ local ok, failure = xpcall(function()
         local success, err = pcall(diagnostic)
         if not success then writeReport({ok=false,error=tostring(err),process=process()}) end
     end)
+    if os.getenv("WV_UI_TEST") == "1" then
+        after(1, function()
+            local success, err = xpcall(function()
+                nativeUI.showAbout()
+                after(3, function() pcall(nativeUI.closeAbout) end)
+                after(0.5, function()
+                    local captured, problem = xpcall(function()
+                        local saved, why = nativeUI.saveAboutPreview(support .. "/about-preview.png")
+                        local ui = nativeUI.diagnostics()
+                        ui.previewSaved = saved
+                        ui.ok = ui.configured and ui.nativeMainMenuReady and ui.aboutVisible and
+                            ui.aboutTitle == "Wallpaper Veil" and not ui.engineWindowsVisible and
+                            ui.repositoryActionWired and ui.noticesActionWired and ui.aboutIconPresent and saved
+                        ui.captureError = why
+                        writeReport(ui, support .. "/ui-check.json")
+                    end, debug.traceback)
+                    if not captured then
+                        pcall(nativeUI.closeAbout)
+                        writeReport({ok=false,error=problem}, support .. "/ui-check.json")
+                    end
+                end)
+            end, debug.traceback)
+            if not success then
+                pcall(nativeUI.closeAbout)
+                writeReport({ok=false,error=err}, support .. "/ui-check.json")
+            end
+        end)
+    end
     if os.getenv("WV_SELF_TEST") == "1" then
         after(1, function()
             local passed, err = xpcall(function()

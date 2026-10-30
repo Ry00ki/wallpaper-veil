@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="base" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#283C51"/><stop offset="1" stop-color="#101D2C"/>
+    </linearGradient>
+    <linearGradient id="sky" x1="0" y1="0" x2="0" y2="1">
+      <stop stop-color="#567E95"/><stop offset="1" stop-color="#2A5066"/>
+    </linearGradient>
+    <clipPath id="outer"><rect x="64" y="64" width="896" height="896" rx="196"/></clipPath>
+    <clipPath id="wallpaper"><rect x="164" y="212" width="696" height="600" rx="60"/></clipPath>
+  </defs>
+  <g clip-path="url(#outer)">
+    <rect x="64" y="64" width="896" height="896" rx="196" fill="url(#base)"/>
+    <g clip-path="url(#wallpaper)">
+      <rect x="164" y="212" width="696" height="600" fill="url(#sky)"/>
+      <circle cx="676" cy="360" r="60" fill="#D5E1DC" opacity=".88"/>
+      <path d="M164 662 350 410 524 614 658 490 860 706V812H164Z" fill="#83A3AD"/>
+      <path d="M164 734 326 566 476 716 650 548 860 738V812H164Z" fill="#365F73"/>
+      <path d="M164 756C304 702 422 760 540 728S748 710 860 766V812H164Z" fill="#1D3E52"/>
+      <path d="M580 212C502 416 590 618 498 812H860V212Z" fill="#071522" opacity=".31"/>
+      <path d="M580 212C502 416 590 618 498 812" fill="none" stroke="#D8E5EA" stroke-opacity=".18" stroke-width="3"/>
+    </g>
+    <rect x="164" y="212" width="696" height="600" rx="60" fill="none" stroke="#D8E5EA" stroke-opacity=".20" stroke-width="3"/>
+    <rect x="66" y="66" width="892" height="892" rx="194" fill="none" stroke="#D8E5EA" stroke-opacity=".12" stroke-width="3"/>
+  </g>
+</svg>
