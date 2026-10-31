@@ -6,6 +6,8 @@
 #include "lauxlib.h"
 #import "update_check.h"
 #import "widget_preferences.h"
+#import "update_download.h"
+#import "update_package.h"
 
 // App-owned UI only. Never alter NSWindowController or another application's UI.
 static NSString * const WVName = @"Wallpaper Veil";
@@ -13,6 +15,7 @@ static NSString * const WVRepository = @"https://github.com/Ry00ki/wallpaper-vei
 static BOOL WVConfigured = NO;
 static BOOL WVPreferencesSuppressed = NO;
 static BOOL WVConsoleSuppressed = NO;
+static NSString *WVUpdateAcknowledgedNonce;
 
 @interface WVUIController : NSObject <NSWindowDelegate, NSURLSessionTaskDelegate>
 @property(nonatomic, strong) NSWindow *aboutWindow;
@@ -26,6 +29,24 @@ static BOOL WVConsoleSuppressed = NO;
 @property(nonatomic, strong) NSMutableArray *releasePages;
 @property(nonatomic, copy) NSDictionary *updateResult;
 @property(nonatomic) NSUInteger updateGeneration;
+@property(nonatomic, strong) NSDictionary *catalog;
+@property(nonatomic, strong) NSButton *stableButton;
+@property(nonatomic, strong) NSButton *previewButton;
+@property(nonatomic, strong) NSTextField *stableLabel;
+@property(nonatomic, strong) NSTextField *previewLabel;
+@property(nonatomic, strong) WVUpdateDownloader *downloader;
+@property(nonatomic, copy) NSString *installPhase;
+@property(nonatomic) BOOL testingAutoCheck;
+@property(nonatomic) NSUInteger installGeneration;
+@property(nonatomic, strong) NSTask *installer;
+@property(nonatomic, strong) NSTimer *installerPoll;
+@property(nonatomic, strong) NSDictionary *installRequest;
+- (void)renderCatalog;
+- (void)installRelease:(id)sender;
+- (void)cancelInstall;
+- (void)finishInstallError:(NSString *)message;
+- (void)startInstaller:(NSDictionary *)request;
+
 - (void)checkForUpdates:(id)sender;
 - (void)cancelUpdateCheck;
 - (void)openRelease:(id)sender;
@@ -64,79 +85,123 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
 @implementation WVUIController
 - (void)makeAbout {
     if (self.aboutWindow) return;
-    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0, 0, 520, 550)
-        styleMask:NSWindowStyleMaskTitled | NSWindowStyleMaskClosable
-        backing:NSBackingStoreBuffered defer:NO];
-    window.title = WVName;
-    window.releasedWhenClosed = NO;
-    window.delegate = self;
-    window.tabbingMode = NSWindowTabbingModeDisallowed;
-    NSView *content = window.contentView;
-    NSImageView *icon = [[NSImageView alloc] initWithFrame:NSMakeRect(212, 430, 96, 96)];
-    icon.image = WVIcon();
-    icon.imageScaling = NSImageScaleProportionallyUpOrDown;
-    [content addSubview:icon];
-    [content addSubview:WVLabel(WVName, NSMakeRect(30, 390, 460, 32), 25, NSFontWeightSemibold)];
-    NSDictionary *info = NSBundle.mainBundle.infoDictionary;
-    NSString *version = info[@"CFBundleShortVersionString"] ?: @"Unknown";
-    NSString *build = info[@"CFBundleVersion"] ?: @"Unknown";
-    NSTextField *versionLabel = WVLabel([NSString stringWithFormat:@"Version %@ (build %@)", version, build],
-        NSMakeRect(30, 365, 460, 20), 13, NSFontWeightRegular);
-    versionLabel.textColor = NSColor.secondaryLabelColor;
-    [content addSubview:versionLabel];
-    NSString *channel = info[@"WVReleaseChannel"] ?: @"Unknown";
-    NSString *tag = info[@"WVReleaseTag"] ?: @"Unversioned build";
-    NSTextField *releaseLabel = WVLabel([NSString stringWithFormat:@"%@ · %@", channel.capitalizedString, tag],
-        NSMakeRect(30, 341, 460, 20), 12, NSFontWeightRegular);
-    releaseLabel.textColor = NSColor.secondaryLabelColor;
-    [content addSubview:releaseLabel];
-    NSTextField *detail = WVLabel(@"Standalone macOS app\nMIT licence. Open-source credits and additional notices\nare included with the app.",
-        NSMakeRect(30, 276, 460, 58), 12, NSFontWeightRegular);
-    detail.maximumNumberOfLines = 3;
-    detail.cell.usesSingleLineMode = NO;
-    detail.cell.wraps = YES;
-    detail.cell.scrollable = NO;
-    detail.lineBreakMode = NSLineBreakByWordWrapping;
-    detail.textColor = NSColor.secondaryLabelColor;
-    [content addSubview:detail];
-    self.updateButton = [NSButton buttonWithTitle:@"Check for Updates" target:self action:@selector(checkForUpdates:)];
-    self.updateButton.frame = NSMakeRect(160, 236, 200, 32);
-    self.updateButton.bezelStyle = NSBezelStyleRounded;
-    [content addSubview:self.updateButton];
-    self.updateProgress = [[NSProgressIndicator alloc] initWithFrame:NSMakeRect(373, 245, 16, 16)];
-    self.updateProgress.style = NSProgressIndicatorStyleSpinning;
-    self.updateProgress.displayedWhenStopped = NO;
-    [content addSubview:self.updateProgress];
-    self.updateLabel = WVLabel(@"Check GitHub for a newer release.\nNo automatic downloads or installation.",
-        NSMakeRect(30, 170, 460, 58), 12, NSFontWeightRegular);
-    self.updateLabel.maximumNumberOfLines = 3;
-    self.updateLabel.cell.usesSingleLineMode = NO;
-    self.updateLabel.cell.wraps = YES;
-    self.updateLabel.cell.scrollable = NO;
-    self.updateLabel.lineBreakMode = NSLineBreakByWordWrapping;
-    self.updateLabel.textColor = NSColor.secondaryLabelColor;
-    [content addSubview:self.updateLabel];
-    self.releaseButton = [NSButton buttonWithTitle:@"View Release on GitHub" target:self action:@selector(openRelease:)];
-    self.releaseButton.frame = NSMakeRect(140, 132, 240, 32);
-    self.releaseButton.bezelStyle = NSBezelStyleRounded;
-    self.releaseButton.hidden = YES;
-    [content addSubview:self.releaseButton];
-    NSButton *repository = [NSButton buttonWithTitle:@"Open GitHub Repository"
-        target:self action:@selector(openRepository:)];
-    repository.frame = NSMakeRect(140, 87, 240, 32);
-    repository.bezelStyle = NSBezelStyleRounded;
-    [content addSubview:repository];
-    NSButton *notices = [NSButton buttonWithTitle:@"Third-Party Notices"
-        target:self action:@selector(openNotices:)];
-    notices.frame = NSMakeRect(155, 45, 210, 32);
-    notices.bezelStyle = NSBezelStyleRounded;
-    [content addSubview:notices];
-    NSTextField *manual = WVLabel(@"Updates are checked only when you click. Installation stays manual.",
-        NSMakeRect(20, 14, 480, 18), 10.5, NSFontWeightRegular);
-    manual.textColor = NSColor.secondaryLabelColor;
-    [content addSubview:manual];
-    self.updateResult = @{@"state": @"idle"};
-    self.aboutWindow = window;
+    NSWindow *window = [[NSWindow alloc] initWithContentRect:NSMakeRect(0,0,560,665)
+        styleMask:NSWindowStyleMaskTitled|NSWindowStyleMaskClosable backing:NSBackingStoreBuffered defer:NO];
+    window.title=WVName; window.releasedWhenClosed=NO; window.delegate=self;
+    window.tabbingMode=NSWindowTabbingModeDisallowed;
+    NSView *content=window.contentView;
+    NSImageView *icon=[[NSImageView alloc] initWithFrame:NSMakeRect(232,548,96,96)];
+    icon.image=WVIcon();icon.imageScaling=NSImageScaleProportionallyUpOrDown;[content addSubview:icon];
+    [content addSubview:WVLabel(WVName,NSMakeRect(20,506,520,34),25,NSFontWeightSemibold)];
+    NSDictionary *info=NSBundle.mainBundle.infoDictionary;
+    NSTextField *version=WVLabel([NSString stringWithFormat:@"Version %@ (build %@)",info[@"CFBundleShortVersionString"]?:@"Unknown",info[@"CFBundleVersion"]?:@"Unknown"],NSMakeRect(20,480,520,20),13,NSFontWeightRegular);
+    version.textColor=NSColor.secondaryLabelColor;[content addSubview:version];
+    NSTextField *channel=WVLabel([NSString stringWithFormat:@"%@ · %@",[info[@"WVReleaseChannel"] capitalizedString]?:@"Unknown",info[@"WVReleaseTag"]?:@""],NSMakeRect(20,456,520,20),12,NSFontWeightRegular);
+    channel.textColor=NSColor.secondaryLabelColor;[content addSubview:channel];
+    NSTextField *detail=WVLabel(@"Standalone macOS app · MIT licence\nOpen-source credits and additional notices are included.",NSMakeRect(20,408,520,40),12,NSFontWeightRegular);
+    detail.maximumNumberOfLines=2;detail.textColor=NSColor.secondaryLabelColor;[content addSubview:detail];
+    self.updateButton=[NSButton buttonWithTitle:@"Check Again" target:self action:@selector(checkForUpdates:)];
+    self.updateButton.frame=NSMakeRect(195,367,170,30);self.updateButton.bezelStyle=NSBezelStyleRounded;[content addSubview:self.updateButton];
+    self.updateProgress=[[NSProgressIndicator alloc] initWithFrame:NSMakeRect(375,374,16,16)];
+    self.updateProgress.style=NSProgressIndicatorStyleSpinning;self.updateProgress.displayedWhenStopped=NO;[content addSubview:self.updateProgress];
+    self.updateLabel=WVLabel(@"Checking GitHub releases…",NSMakeRect(20,322,520,38),12,NSFontWeightRegular);
+    self.updateLabel.maximumNumberOfLines=2;self.updateLabel.cell.wraps=YES;self.updateLabel.cell.scrollable=NO;self.updateLabel.textColor=NSColor.secondaryLabelColor;[content addSubview:self.updateLabel];
+    self.stableLabel=WVLabel(@"Stable release · Recommended",NSMakeRect(20,271,520,42),12,NSFontWeightMedium);self.stableLabel.maximumNumberOfLines=2;[content addSubview:self.stableLabel];
+    self.stableButton=[NSButton buttonWithTitle:@"Checking stable release…" target:self action:@selector(installRelease:)];
+    self.stableButton.tag=0;self.stableButton.frame=NSMakeRect(115,235,330,30);self.stableButton.bezelStyle=NSBezelStyleRounded;self.stableButton.enabled=NO;[content addSubview:self.stableButton];
+    self.previewLabel=WVLabel(@"Preview · Early access builds",NSMakeRect(20,180,520,42),12,NSFontWeightRegular);self.previewLabel.maximumNumberOfLines=2;self.previewLabel.textColor=NSColor.secondaryLabelColor;[content addSubview:self.previewLabel];
+    self.previewButton=[NSButton buttonWithTitle:@"Checking preview…" target:self action:@selector(installRelease:)];
+    self.previewButton.tag=1;self.previewButton.frame=NSMakeRect(115,145,330,30);self.previewButton.bezelStyle=NSBezelStyleRounded;self.previewButton.enabled=NO;[content addSubview:self.previewButton];
+    self.releaseButton=[NSButton buttonWithTitle:@"View Release on GitHub" target:self action:@selector(openRelease:)];
+    self.releaseButton.frame=NSMakeRect(35,92,230,30);self.releaseButton.bezelStyle=NSBezelStyleRounded;self.releaseButton.hidden=YES;[content addSubview:self.releaseButton];
+    NSButton *repository=[NSButton buttonWithTitle:@"Open GitHub Repository" target:self action:@selector(openRepository:)];
+    repository.frame=NSMakeRect(275,92,250,30);repository.bezelStyle=NSBezelStyleRounded;[content addSubview:repository];
+    NSButton *notices=[NSButton buttonWithTitle:@"Third-Party Notices" target:self action:@selector(openNotices:)];notices.frame=NSMakeRect(170,48,220,30);notices.bezelStyle=NSBezelStyleRounded;[content addSubview:notices];
+    NSTextField *footer=WVLabel(@"Checks on opening. Download & Install restarts the app and keeps your settings.",NSMakeRect(15,14,530,20),10.5,NSFontWeightRegular);footer.textColor=NSColor.secondaryLabelColor;[content addSubview:footer];
+    self.updateResult=@{@"state":@"idle"};self.aboutWindow=window;
+}
+- (void)renderCatalog {
+    BOOL busy=self.installPhase.length>0 || self.updateTask!=nil;
+    for(NSString *key in @[@"stable",@"preview"]){
+        NSDictionary *row=self.catalog[key];BOOL stable=[key isEqual:@"stable"];
+        NSButton *button=stable?self.stableButton:self.previewButton;
+        NSTextField *label=stable?self.stableLabel:self.previewLabel;
+        NSString *title=stable?@"Stable release · Recommended":@"Preview · Early access";
+        label.stringValue=[NSString stringWithFormat:@"%@\n%@",title,row[@"message"]?:@"Checking…"];
+        NSString *tag=row[@"latestTag"];
+        button.title=[row[@"canInstall"] boolValue]?[NSString stringWithFormat:@"Download & Install %@",tag]:
+            ([row[@"state"] isEqual:@"current"]?@"Installed":([row[@"state"] isEqual:@"ahead"]?@"Installed version is newer":(tag.length?@"Download unavailable":@"Not published yet")));
+        button.enabled=!busy&&[row[@"canInstall"] boolValue];
+    }
+}
+- (void)finishInstallError:(NSString *)message {
+    self.installPhase=nil;self.installer=nil;[self.installerPoll invalidate];self.installerPoll=nil;
+    self.updateLabel.stringValue=message?:@"The update could not be installed. Your current app has been kept.";
+    self.updateButton.title=@"Check Again";self.updateButton.enabled=YES;[self.updateProgress stopAnimation:nil];[self renderCatalog];
+}
+- (void)cancelInstall {
+    if(!self.installPhase.length || [self.installPhase isEqual:@"handoff"])return;
+    self.installGeneration++;[self.downloader cancel];self.downloader=nil;
+    [self finishInstallError:@"Update cancelled. Your installed app is unchanged."];
+}
+- (void)installRelease:(id)sender {
+    if(self.installPhase.length||self.updateTask)return;
+    NSString *key=[sender tag]==1?@"preview":@"stable";NSDictionary *row=self.catalog[key];
+    if(![row[@"canInstall"] boolValue])return;
+    self.installPhase=@"downloading";NSUInteger generation=++self.installGeneration;
+    self.updateButton.title=@"Cancel Download";self.updateButton.enabled=YES;[self.updateProgress startAnimation:nil];[self renderCatalog];
+    self.downloader=[WVUpdateDownloader new];
+    __weak WVUIController *weakSelf=self;
+    [self.downloader startDescriptor:row[@"descriptor"] progress:^(int64_t received,int64_t expected){
+        WVUIController *owner=weakSelf;if(!owner||owner.installGeneration!=generation)return;
+        owner.updateLabel.stringValue=[NSString stringWithFormat:@"Downloading update… %.0f%%",expected>0?100.0*received/expected:0];
+    } completion:^(NSDictionary *result){
+        WVUIController *owner=weakSelf;if(!owner)return;
+        NSURL *directory=result[@"directoryURL"];
+        if(owner.installGeneration!=generation){if(directory)[NSFileManager.defaultManager removeItemAtURL:directory error:NULL];return;}
+        owner.downloader=nil;
+        if(![result[@"ok"] boolValue]){[owner finishInstallError:result[@"error"]?:@"The download could not be verified. Try again."];return;}
+        owner.installPhase=@"verifying";owner.updateLabel.stringValue=@"Verifying the downloaded app…";
+        NSURL *zip=result[@"fileURL"];
+        NSURL *outer=[NSBundle.mainBundle.bundleURL URLByDeletingLastPathComponent];outer=[outer URLByDeletingLastPathComponent];outer=[outer URLByDeletingLastPathComponent];
+        NSURL *jobs=[NSURL fileURLWithPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Wallpaper Veil/Updates"] isDirectory:YES];
+        dispatch_async(dispatch_get_global_queue(QOS_CLASS_USER_INITIATED,0),^{
+            NSError *error=nil;NSDictionary *request=WVPrepareUpdate(zip,result[@"descriptor"],outer,jobs,getpid(),&error);
+            if(directory)[NSFileManager.defaultManager removeItemAtURL:directory error:NULL];
+            dispatch_async(dispatch_get_main_queue(),^{
+                WVUIController *current=weakSelf;
+                if(!current||current.installGeneration!=generation){if(request)WVDiscardPreparedUpdate(request,NULL);return;}
+                if(!request){[current finishInstallError:error.localizedDescription?:@"The downloaded app could not be prepared. Your current app is unchanged."];return;}
+                [current startInstaller:request];
+            });
+        });
+    }];
+}
+- (void)startInstaller:(NSDictionary *)request {
+    self.installPhase=@"handoff";self.installRequest=request;self.updateButton.enabled=NO;
+    self.updateLabel.stringValue=@"Preparing to restart Wallpaper Veil…";[self renderCatalog];
+    NSTask *task=[NSTask new];task.executableURL=[NSURL fileURLWithPath:request[@"helperPath"]];task.arguments=@[@"--install",request[@"jobDir"]];
+    NSError *error=nil;if(![task launchAndReturnError:&error]){WVDiscardPreparedUpdate(request,NULL);[self finishInstallError:error.localizedDescription];return;}
+    self.installer=task;NSDate *deadline=[NSDate dateWithTimeIntervalSinceNow:20];
+    __weak WVUIController *weakSelf=self;
+    self.installerPoll=[NSTimer timerWithTimeInterval:0.1 repeats:YES block:^(NSTimer *timer){
+        WVUIController *owner=weakSelf;if(!owner){[timer invalidate];return;}
+        NSDictionary *ready=WVReadPrivateUpdateJSON([NSURL fileURLWithPath:[request[@"jobDir"] stringByAppendingPathComponent:@"ready.json"]],NULL);
+        if([ready[@"nonce"] isEqual:request[@"nonce"]]&&[ready[@"helperPID"] intValue]==task.processIdentifier&&task.running){
+            [timer invalidate];owner.installerPoll=nil;owner.updateLabel.stringValue=@"Installing and restarting…";[NSApp terminate:nil];return;
+        }
+        if(!task.running||deadline.timeIntervalSinceNow<=0){
+            [timer invalidate];owner.installerPoll=nil;
+            // The helper never replaces a live original runtime. Retain its
+            // journal for recovery; do not delete files it may still own.
+            if(task.running)[task terminate];
+            [owner finishInstallError:@"The installer could not start. Your current app is still running. Close About and try again."];
+        }
+    }];
+    [NSRunLoop.mainRunLoop addTimer:self.installerPoll forMode:NSRunLoopCommonModes];
+}
+- (void)windowWillClose:(NSNotification *)notification {
+    if(notification.object==self.aboutWindow){[self cancelUpdateCheck];[self cancelInstall];}
 }
 - (void)finishUpdate:(NSDictionary *)result {
     // Every terminal path invalidates queued callbacks and the whole-check clock.
@@ -146,6 +211,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     [self.updateTask cancel];
     [self.updateSession invalidateAndCancel];
     self.updateResult = result;
+    if([result[@"state"] isEqual:@"error"]){NSDictionary *row=@{@"state":@"error",@"message":@"Unable to check right now",@"canInstall":@NO};self.catalog=@{@"stable":row,@"preview":row};}
     self.updateLabel.stringValue = result[@"message"] ?: @"";
     self.updateButton.enabled = YES;
     self.updateButton.title = @"Check Again";
@@ -154,6 +220,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     self.updateSession = nil;
     self.updateTask = nil;
     self.releasePages = nil;
+    [self renderCatalog];
 }
 - (void)cancelUpdateCheck {
     if (!self.updateTask && !self.updateDeadline) return;
@@ -163,11 +230,13 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
 - (void)checkForUpdates:(id)sender {
     (void)sender;
     [self makeAbout];
+    if(self.installPhase.length){[self cancelInstall];return;}
     if (self.updateTask) return;
     self.updateGeneration++;
     self.releasePages = [NSMutableArray array];
     self.updateResult = @{@"state": @"checking"};
     self.updateLabel.stringValue = @"Checking published GitHub releases…";
+    self.stableButton.enabled=NO;self.previewButton.enabled=NO;
     self.releaseButton.hidden = YES;
     self.updateButton.enabled = NO;
     [self.updateProgress startAnimation:nil];
@@ -195,7 +264,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     NSMutableURLRequest *request = [NSMutableURLRequest requestWithURL:url];
     [request setValue:@"application/vnd.github+json" forHTTPHeaderField:@"Accept"];
     [request setValue:@"2026-03-10" forHTTPHeaderField:@"X-GitHub-Api-Version"];
-    [request setValue:@"Wallpaper-Veil-Manual-Update-Check" forHTTPHeaderField:@"User-Agent"];
+    [request setValue:@"Wallpaper-Veil-Update-Check" forHTTPHeaderField:@"User-Agent"];
     self.updateTask = [self.updateSession dataTaskWithRequest:request completionHandler:^(NSData *data, NSURLResponse *response, NSError *error) {
         dispatch_async(dispatch_get_main_queue(), ^{
             if (generation != self.updateGeneration) return;
@@ -214,6 +283,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
                 return;
             }
             NSDictionary *info = NSBundle.mainBundle.infoDictionary;
+            self.catalog=WVUpdateCatalog(self.releasePages,info[@"WVReleaseTag"]);
             [self finishUpdate:WVEvaluateReleases(self.releasePages, info[@"WVReleaseTag"], info[@"WVReleaseChannel"])];
         });
     }];
@@ -238,9 +308,11 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
 - (void)showAbout:(id)sender {
     (void)sender;
     [self makeAbout];
-    if (!self.aboutWindow.visible) [self.aboutWindow center];
+    BOOL opening=!self.aboutWindow.visible;
+    if (opening) [self.aboutWindow center];
     [self.aboutWindow makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
+    if(opening && (strcmp(getenv("WV_UI_TEST")?:"","1")!=0 || self.testingAutoCheck) && !self.installPhase.length)[self checkForUpdates:nil];
 }
 - (void)openRepository:(id)sender {
     (void)sender;
@@ -500,7 +572,15 @@ static int WVDiagnostics(lua_State *L) {
             @"aboutText": aboutText, @"aboutButtons": aboutButtons, @"repositoryURL": WVRepository,
             @"repositoryActionWired": @(repositoryWired), @"noticesActionWired": @(noticesWired),
             @"aboutIconPresent": @(iconPresent), @"updateActionWired": @(updateWired),
-            @"releaseActionWired": @(releaseWired), @"updateInProgress": @(WVController.updateTask != nil),
+            @"releaseActionWired": @(releaseWired),
+            @"stableInstallAvailable": @([WVController.catalog[@"stable"][@"canInstall"] boolValue]),
+            @"previewInstallAvailable": @([WVController.catalog[@"preview"][@"canInstall"] boolValue]),
+            @"stableTag": WVController.catalog[@"stable"][@"latestTag"]?:@"",
+            @"previewTag": WVController.catalog[@"preview"][@"latestTag"]?:@"",
+            @"stableState": WVController.catalog[@"stable"][@"state"]?:@"idle",
+            @"previewState": WVController.catalog[@"preview"][@"state"]?:@"idle",
+            @"installPhase": WVController.installPhase?:@"idle",
+            @"automaticCheckOnOpen":@YES, @"updateInProgress": @(WVController.updateTask != nil),
             @"updateDeadlineActive": @(WVController.updateDeadline.isValid),
             @"desktopControlSettingsPane": WVAccessibilityPaneName(),
             @"desktopControlSettingsURL": WVAccessibilitySettingsURL,
@@ -518,12 +598,12 @@ static int WVDiagnostics(lua_State *L) {
     for (NSString *key in @[@"configured", @"preferencesSuppressed", @"consoleSuppressed",
         @"engineWindowsVisible", @"nativeMainMenuReady", @"aboutWindowCreated", @"aboutVisible",
         @"repositoryActionWired", @"noticesActionWired", @"aboutIconPresent",
-        @"updateActionWired", @"releaseActionWired", @"updateInProgress", @"updateDeadlineActive"])
+        @"updateActionWired", @"releaseActionWired", @"updateInProgress", @"updateDeadlineActive", @"stableInstallAvailable", @"previewInstallAvailable", @"automaticCheckOnOpen"])
         WVSetBoolean(L, key.UTF8String, [values[key] boolValue]);
     WVSetString(L, "aboutTitle", values[@"aboutTitle"]);
     WVSetString(L, "repositoryURL", values[@"repositoryURL"]);
     for (NSString *key in @[@"desktopControlSettingsPane", @"desktopControlSettingsURL", @"desktopControlSubjectBundleID", @"currentReleaseTag", @"releaseChannel", @"currentVersion", @"currentBuild",
-        @"updateState", @"updateMessage", @"latestTag", @"latestURL"])
+        @"updateState", @"updateMessage", @"latestTag", @"latestURL", @"stableTag", @"previewTag", @"stableState", @"previewState", @"installPhase"])
         WVSetString(L, key.UTF8String, values[key]);
     for (NSString *key in @[@"menuItems", @"aboutText", @"aboutButtons"]) {
         lua_newtable(L);
@@ -574,8 +654,47 @@ static int WVTestUpdateResponse(lua_State *L) {
     });
     return WVDiagnostics(L);
 }
+static int WVTestInstallUpdate(lua_State *L) {
+    if(strcmp(getenv("WV_UI_TEST")?:"","1")!=0)return luaL_error(L,"Update installation qualification requires WV_UI_TEST=1");
+    const char *value=luaL_checkstring(L,1);NSString *channel=[NSString stringWithUTF8String:value];
+    if(![@[@"stable",@"preview"] containsObject:channel])return luaL_error(L,"Unknown update channel");
+    __block BOOL started=NO;
+    WVOnMain(^{NSDictionary *row=WVController.catalog[channel];if([row[@"canInstall"] boolValue]){
+        [WVController installRelease:[channel isEqual:@"stable"]?WVController.stableButton:WVController.previewButton];started=WVController.installPhase.length>0;}});
+    lua_pushboolean(L,started);return 1;
+}
+static int WVTestAutomaticAboutCheck(lua_State *L) {
+    if(strcmp(getenv("WV_UI_TEST")?:"","1")!=0)return luaL_error(L,"About fixtures require WV_UI_TEST=1");
+    __block BOOL started=NO;
+    WVOnMain(^{[WVController.aboutWindow close];WVController.testingAutoCheck=YES;[WVController showAbout:nil];
+        started=WVController.aboutWindow.visible&&WVController.updateTask!=nil;
+        WVController.testingAutoCheck=NO;[WVController cancelUpdateCheck];});
+    lua_pushboolean(L,started);return 1;
+}
+static int WVAcknowledgeUpdate(lua_State *L) {
+    NSString *job=NSProcessInfo.processInfo.environment[@"WV_UPDATE_TRANSACTION"];
+    NSString *nonce=NSProcessInfo.processInfo.environment[@"WV_UPDATE_NONCE"];
+    if(!job.length&&!nonce.length){lua_pushboolean(L,YES);return 1;}
+    if(nonce.length&&[nonce isEqual:WVUpdateAcknowledgedNonce]){lua_pushboolean(L,YES);return 1;}
+    NSError *error=nil;NSURL *jobURL=[NSURL fileURLWithPath:job?:@""];
+    NSDictionary *request=WVUpdateRequestForJob(jobURL,&error);
+    NSURL *outer=[[[NSBundle.mainBundle.bundleURL URLByDeletingLastPathComponent] URLByDeletingLastPathComponent] URLByDeletingLastPathComponent];
+    NSDictionary *build=nil;
+    NSData *data=[NSData dataWithContentsOfURL:[NSBundle.mainBundle.resourceURL URLByAppendingPathComponent:@"wallpaper-veil-build.json"]];
+    id raw=data?[NSJSONSerialization JSONObjectWithData:data options:0 error:&error]:nil;
+    if([raw isKindOfClass:NSDictionary.class])build=raw;
+    NSDictionary *info=NSBundle.mainBundle.infoDictionary;
+    BOOL valid=request&&[nonce isEqual:request[@"nonce"]]&&WVAuthorizeUpdateLaunch(jobURL,nonce,outer,&error)&&
+        [info[@"WVReleaseTag"] isEqual:request[@"tag"]]&&[info[@"CFBundleVersion"] isEqual:request[@"build"]]&&
+        [build[@"source"][@"local_head"] isEqual:request[@"sourceCommit"]];
+    if(valid){NSDictionary *health=@{@"ok":@YES,@"nonce":nonce,@"tag":info[@"WVReleaseTag"],@"build":info[@"CFBundleVersion"],
+        @"sourceCommit":build[@"source"][@"local_head"],@"pid":@(getpid()),@"executablePath":NSBundle.mainBundle.executablePath,
+        @"installedAppPath":outer.path};valid=WVWritePrivateUpdateJSON(health,[jobURL URLByAppendingPathComponent:@"health.json"],&error);}
+    if(valid)WVUpdateAcknowledgedNonce=[nonce copy];
+    lua_pushboolean(L,valid);if(!valid){lua_pushstring(L,(error.localizedDescription?:@"The update health identity did not match").UTF8String);return 2;}return 1;
+}
 static int WVCloseAbout(lua_State *L) {
-    WVOnMain(^{ [WVController.aboutWindow orderOut:nil]; });
+    WVOnMain(^{ [WVController.aboutWindow close]; });
     lua_pushboolean(L, YES); return 1;
 }
 static int WVSaveAboutPreview(lua_State *L) {
@@ -655,6 +774,7 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
         {"diagnostics", WVDiagnostics}, {"closeAbout", WVCloseAbout},
         {"checkForUpdates", WVCheckForUpdates}, {"cancelUpdateCheck", WVCancelUpdateCheck},
         {"testUpdateResponse", WVTestUpdateResponse},
+        {"testAutomaticAboutCheck", WVTestAutomaticAboutCheck}, {"testInstallUpdate", WVTestInstallUpdate}, {"acknowledgeUpdate", WVAcknowledgeUpdate},
         {"saveAboutPreview", WVSaveAboutPreview},
         {"loginStatus", WVLoginStatus}, {"setLaunchAtLogin", WVSetLaunchAtLogin},
         {"openLoginSettings", WVOpenLoginSettings},

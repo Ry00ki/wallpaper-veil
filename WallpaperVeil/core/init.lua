@@ -5,6 +5,7 @@ local bundleID = "com.ry00ki.wallpaperveil"
 local reportPath = support .. "/diagnostics.json"
 wallpaperVeilAppTimers = {}
 local appActive = true
+local brightnessLifecycleWatcher
 local function after(seconds, callback)
     local timer = hs.timer.doAfter(seconds, function()
         if appActive then callback() end
@@ -38,6 +39,10 @@ local function cleanup()
     wallpaperVeilAppTimers = {}
     local acceptance = package.loaded["acceptance"]
     if acceptance and acceptance.cancel then pcall(acceptance.cancel) end
+    if brightnessLifecycleWatcher then
+        pcall(function() brightnessLifecycleWatcher:stop() end)
+        brightnessLifecycleWatcher = nil
+    end
     if displayBrightnessSync then pcall(displayBrightnessSync.stop) end
     if wallpaperVeil then pcall(wallpaperVeil.stop) end
 end
@@ -75,6 +80,16 @@ local ok, failure = xpcall(function()
         reset=nativeUI.resetWidgetDefaults})
     displayBrightnessSync = require("display_brightness_sync")
     displayBrightnessSync.start(wallpaperVeil)
+    local lifecycleSync = displayBrightnessSync
+    brightnessLifecycleWatcher = hs.caffeinate.watcher.new(function(event)
+        if not appActive or displayBrightnessSync ~= lifecycleSync then return end
+        local events = hs.caffeinate.watcher
+        if event == events.systemWillSleep then lifecycleSync.suspend("system")
+        elseif event == events.systemDidWake then lifecycleSync.resume("system")
+        elseif event == events.screensDidSleep then lifecycleSync.suspend("display")
+        elseif event == events.screensDidWake then lifecycleSync.resume("display") end
+    end)
+    brightnessLifecycleWatcher:start()
     local appSettings = require("app_settings")
     local baseMenu = wallpaperVeil.menuItems
     wallpaperVeil.menuItems = function(...)
@@ -113,6 +128,11 @@ local ok, failure = xpcall(function()
         probe.loginItem = nativeUI.loginStatus()
         probe.desktopWidgets = wallpaperVeil.widgets.status()
         probe.prototype = "Bundled upstream native runtime with app-owned launcher and Lua"
+        if probe.ok and nativeUI.acknowledgeUpdate then
+            local acknowledged, why = nativeUI.acknowledgeUpdate()
+            probe.updateHealthAcknowledged = acknowledged == true
+            if not acknowledged then probe.ok=false; probe.updateHealthError=why end
+        end
         writeReport(probe)
     end
     after(0.5, function()
@@ -162,6 +182,7 @@ local ok, failure = xpcall(function()
                         local major = assert(ui.currentVersion:match("^(%d+)%."))
                         local newer = string.format("v%d.0.0", tonumber(major)+1)
                         local checks = {}
+                        checks.automaticAbout = nativeUI.testAutomaticAboutCheck() == true
                         local current = nativeUI.testUpdateResponse(hs.json.encode({release(ui.currentReleaseTag)}))
                         checks.current = current.updateState == "current" and current.latestTag == ui.currentReleaseTag
                         local available = nativeUI.testUpdateResponse(hs.json.encode({release(newer)}))
@@ -177,6 +198,7 @@ local ok, failure = xpcall(function()
                         ui.updateFixtureChecks = checks
                         for _, passed in pairs(checks) do if not passed then ui.ok=false end end
                         writeReport(ui, support .. "/ui-check.json")
+                        assert(ui.ok, "Native About/update fixture qualification failed")
                         -- Explicit UI-test mode exercises the same manual action
                         -- after offline fixtures; normal startup never checks.
                         nativeUI.checkForUpdates()
@@ -204,14 +226,23 @@ local ok, failure = xpcall(function()
                                 result.previewSaved = true
                                 -- Opening this pane is a non-mutating feature check.
                                 -- macOS approval remains a separate user action.
-                                result.desktopControlSettingsDispatched = nativeUI.openAccessibilitySettings()
+                                result.desktopControlSettingsDispatched = false -- unchanged permission route; no repeated OS navigation
+                                local installChannel = os.getenv("WV_UPDATE_TEST_CHANNEL")
+                                if installChannel == "stable" or installChannel == "preview" then
+                                    result.updateInstallationRequested = nativeUI.testInstallUpdate(installChannel)
+                                    assert(result.updateInstallationRequested, "No newer verified release is installable for " .. installChannel)
+                                end
                                 writeReport(result, support .. "/update-check.json")
-                                after(1, function()
-                                    local closed, failure = pcall(nativeUI.closeAbout)
-                                    if not closed then
-                                        failUITest(failure, support .. "/update-check.json", "live-public-GitHub-release-check")
-                                    end
-                                end)
+                                -- An active update owns this window until installer handoff.
+                                -- Closing it here would cancel a download after one second.
+                                if installChannel ~= "stable" and installChannel ~= "preview" then
+                                    after(1, function()
+                                        local closed, failure = pcall(nativeUI.closeAbout)
+                                        if not closed then
+                                            failUITest(failure, support .. "/update-check.json", "live-public-GitHub-release-check")
+                                        end
+                                    end)
+                                end
                             end, debug.traceback)
                             if not passed then
                                 failUITest(problem, support .. "/update-check.json", "live-public-GitHub-release-check")

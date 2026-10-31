@@ -44,6 +44,8 @@ def read_build_report(app: Path) -> dict:
         raise RuntimeError('Builder report does not match the signed application provenance')
     binaries = {'signed_launcher_sha256': app / 'Contents/MacOS/WallpaperVeil',
                 'signed_engine_sha256': app / 'Contents/Helpers/Wallpaper Veil Runtime.app/Contents/MacOS/WallpaperVeilRuntime'}
+    if report.get('update_protocol') == 1:
+        binaries['signed_updater_sha256'] = app / 'Contents/Helpers/WallpaperVeilUpdater'
     for key, path in binaries.items():
         if report.get(key) != hashlib.sha256(path.read_bytes()).hexdigest():
             raise RuntimeError('Builder report does not match the signed application executables')
@@ -79,7 +81,7 @@ def package(app: Path, destination: Path) -> Path:
     destination.mkdir(parents=True, exist_ok=True)
     bundle_contract = verify(app)
     report = read_build_report(app)
-    archive = destination / 'wallpaper-veil-preview.zip'
+    archive = destination / ('wallpaper-veil.zip' if report['release_channel'] == 'stable' else 'wallpaper-veil-preview.zip')
     if archive.exists():
         raise RuntimeError('Choose an artifact directory without an existing preview ZIP')
     subprocess.run(['/usr/bin/ditto', '-c', '-k', '--norsrc', '--noextattr', '--keepParent',
@@ -109,7 +111,7 @@ def package(app: Path, destination: Path) -> Path:
         'engine_recompiled_from_source': report['engine_recompiled_from_source'],
         'launcher_recompiled_from_source': report['launcher_recompiled_from_source'],
         'ui_recompiled_from_source': report['ui_recompiled_from_source'],
-        'distribution': 'Experimental preview, ad hoc signed; not Developer ID signed or notarized',
+        'distribution': ('Stable release' if report['release_channel'] == 'stable' else 'Preview') + ', ad hoc signed; not Developer ID signed or notarized',
     }
     (destination / 'wallpaper-veil-package.json').write_text(json.dumps(summary, indent=2) + '\n')
     print(json.dumps(summary, indent=2))

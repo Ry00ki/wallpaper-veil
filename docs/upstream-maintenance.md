@@ -67,3 +67,9 @@ The qualified policy deliberately fails closed on changed policy bytes, wrong ta
 ## Further consolidation
 
 A smaller native runtime or direct native replacement of a binding is a separate engineering change. Use the map above to select one worthwhile boundary, preserve its actual behavior/tests, record the original-to-owned translation, and qualify a new engine/product artifact. The present cleanup keeps the proven engine behavior and removes source-maintenance duplication; it does not advertise an unqualified rewrite.
+
+## Product-owned updater
+
+The 1.0 updater adds `native/update_download.h/.m`, `update_package.h`, `update_transaction.h` and `updater.m`, with About orchestration in `native_ui.m` and the nonce-bound gate in `launcher.m`. It is implemented over Foundation/AppKit, Security, CommonCrypto, POSIX filesystem operations and system zlib. No new upstream engine patch or dependency is introduced. The retained engine remains 95 native components and its pinned 87 header/legal inputs are unchanged; the total product gains one native installer executable (98).
+
+Future upstream update changes do not automatically replace this app-owned installer. Review relevant process/lifecycle or binding changes against its explicit passive-health and rollback boundary, and qualify the product separately. Its detailed protocol and current ad hoc/Developer ID trust distinction are in [updating](updating.md).

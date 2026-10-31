@@ -1,8 +1,9 @@
 -- Wallpaper Veil brightness-sync extension, version 1.0.0.
 -- Local only. Native hardware brightness; no gamma, overlays or network calls.
 local M = { interval = 0.5, tolerance = 0.02, writeTimeout = 2.0,
-    retryInterval = 0.5, maxWriteAttempts = 3 }
+    retryInterval = 0.5, maxWriteAttempts = 3, suspended = false }
 local PREFIX = "wallpaperVeil.brightnessSync."
+local suspensionReasons = {}
 
 local function valid(value)
     return type(value) == "number" and value == value and value >= 0 and value <= 1
@@ -99,13 +100,44 @@ function M.setEnabled(enabled, quiet)
     end
     M.enabled = enabled == true
     hs.settings.set(PREFIX .. "enabled", M.enabled)
-    if M.enabled then
+    if M.enabled and not M.suspended then
         M.timer = hs.timer.doEvery(M.interval, function() M.tick() end)
         M.tick()
+    elseif M.enabled then
+        M.message = "Paused: waiting for wake"
     else
         M.message = "Off: displays can be adjusted independently"
     end
     return M.enabled
+end
+
+-- Lifecycle suspension is separate from the user's saved enabled choice.
+-- The application forwards paired system/display sleep notifications here.
+function M.suspend(reason)
+    reason = reason or "system"
+    assert(type(reason) == "string" and reason ~= "", "A suspension reason is required")
+    suspensionReasons[reason] = true
+    M.suspended = true
+    if M.timer then M.timer:stop(); M.timer = nil end
+    M.pending = nil
+    if M.enabled then M.message = "Paused: waiting for wake" end
+    return M
+end
+
+function M.resume(reason)
+    reason = reason or "system"
+    assert(type(reason) == "string" and reason ~= "", "A suspension reason is required")
+    suspensionReasons[reason] = nil
+    if not M.suspended or next(suspensionReasons) ~= nil then return M end
+    M.suspended = false
+    -- Wall-clock deadlines from before sleep must never fail a resumed pair.
+    -- New writes still have the same bounded attempts and read-back requirement.
+    M.pending = nil
+    if M.enabled then
+        M.timer = hs.timer.doEvery(M.interval, function() M.tick() end)
+        M.tick()
+    end
+    return M
 end
 
 local function fail(message, cause)
@@ -130,7 +162,7 @@ local function requestFollower(screen, pending, now)
 end
 
 function M.tick()
-    if not M.enabled then return end
+    if not M.enabled or M.suspended then return end
     automaticPair()
     local source, follower, reason = pair()
     if not source then
@@ -225,7 +257,7 @@ end
 
 function M.status()
     return {
-        enabled = M.enabled == true, sourceUUID = M.sourceUUID,
+        enabled = M.enabled == true, suspended = M.suspended, sourceUUID = M.sourceUUID,
         followerUUID = M.followerUUID, message = M.message,
         pending = M.pending ~= nil, lastWrite = M.lastWrite, lastFailure = M.lastFailure,
     }
@@ -234,6 +266,7 @@ end
 function M.stop()
     if M.timer then M.timer:stop(); M.timer = nil end
     M.pending = nil
+    M.suspended, suspensionReasons = false, {}
     M.enabled = false -- Deliberately do not overwrite the persisted preference.
     if M.veil and M.veil.menuItems == M.wrapper then
         M.veil.menuItems = M.originalMenu

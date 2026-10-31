@@ -7,6 +7,7 @@ A user copies one `Wallpaper Veil.app` to Applications. The outer Objective-C la
 ```text
 Wallpaper Veil.app/
   Contents/MacOS/WallpaperVeil                  outer launcher
+  Contents/Helpers/WallpaperVeilUpdater           transient update installer
   Contents/Helpers/Wallpaper Veil Runtime.app/
     Contents/MacOS/WallpaperVeilRuntime         bundled native engine
     Contents/Frameworks/                        LuaSkin and native modules
@@ -53,3 +54,9 @@ Clock/Notification Center geometry checks, AX inspection/AXPress, event taps, pe
 The native `widgetPreferenceRestoreForTest` entry accepts only the same fixed key and rejects normal launches; bounded `--self-test` uses it for transient typed cleanup. This acceptance recovery is separate from production defaults behavior and is not a stored snapshot feature.
 
 See [upstream maintenance](upstream-maintenance.md) for origin/adaptation details and [development](development.md) for build-only tools.
+
+## Native updates
+
+About discovers stable and preview releases independently and checks when opened. The app-owned `native/update_download.m` verifies and streams release receipts/ZIPs. `native/update_package.h` validates and extracts them; `native/updater.m` is a bundled universal installer, using the private transaction/lock/health contract in `native/update_transaction.h`. These are original product code using macOS frameworks and system zlib, not additional Hammerspoon bindings.
+
+The qualified product now has 98 native binaries: the unchanged 95-component engine plus launcher, UI module and updater. During an update the installer runs from its verified private copy outside the bundle so it can replace that bundle safely; it exits after confirmed startup or recovery. Normal startup still has one runtime and no permanent supervisor. See [updating](updating.md) for verification, atomic replacement, rollback and signing limits.
