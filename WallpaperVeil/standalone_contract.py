@@ -10,6 +10,7 @@ import posixpath
 import re
 import stat
 import subprocess
+import unicodedata
 import zipfile
 from pathlib import Path, PurePosixPath
 from typing import Callable
@@ -175,12 +176,14 @@ def validate_archive(archive: Path, expected_root: str = "Wallpaper Veil.app") -
     _require(_member_name(expected_root) == expected_root and "/" not in expected_root
              and expected_root.endswith(".app"), "Invalid expected application ZIP root")
     with zipfile.ZipFile(archive) as source:
-        members, links = {}, {}
+        members, links, aliases = {}, {}, set()
         for item in source.infolist():
             name = _member_name(item.filename)
             _require(name.split("/", 1)[0] == expected_root,
                      "The application ZIP must contain only one top-level app")
-            _require(name not in members, "Duplicate application ZIP entry")
+            alias = unicodedata.normalize("NFD", name).casefold()
+            _require(alias not in aliases, "Duplicate or ambiguous application ZIP entry")
+            aliases.add(alias)
             members[name] = item
             mode = item.external_attr >> 16
             kind = stat.S_IFMT(mode)

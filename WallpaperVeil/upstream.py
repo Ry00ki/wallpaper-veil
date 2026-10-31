@@ -15,7 +15,9 @@ import subprocess
 POLICY_PATH = Path(__file__).resolve().parents[1] / "engine/upstream.json"
 # Qualification boundary, not an independently configurable version. A baseline
 # or input change requires a reviewed policy/digest and engine requalification.
-QUALIFIED_POLICY_SHA256 = "fba33416f486a8d83c9376e1bdc8ddde715859aa5da8b68b904d96c9cc54ff6b"
+# Descriptive integration-map edits update this digest without changing the
+# pinned native baseline, build recipe or retained input qualification.
+QUALIFIED_POLICY_SHA256 = "89a78d40ab7fb6c8aec5e53bed2307b83f28a443fb1c8b783a6e560a2fd7ff91"
 
 
 def _require(condition: bool, message: str) -> None:

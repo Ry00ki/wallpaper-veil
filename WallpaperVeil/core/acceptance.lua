@@ -41,11 +41,16 @@ function M.run(done, options)
     local report = {schema = 2, observedAtUTC = os.date("!%Y-%m-%dT%H:%M:%SZ"),
         checks = {}, brightness = {}, configuration = config,
         limitations = {"Sleep/wake and visual feel require normal user testing.",
-            "Native brightness requests do not return hardware success; only subsequent reads confirm them."}}
+            "Native brightness requests do not return hardware success; only subsequent reads confirm them.",
+            "Widget defaults checks verify one persisted preference and controller quiescence, not physical clock or Notification Center UI behavior."}}
     local old = {enabled = veil.enabled, opacity = veil.opacity, color = veil.color,
         syncEnabled = sync.enabled == true}
     local source, follower, sourceBrightness, followerBrightness
     local hardwareTouched = false
+    local widgetPreferences = options.widgetPreferences
+    local widgetSnapshot, widgets, widgetTouched = nil, nil, false
+    local widgetPrefix = "wallpaperVeil.widgets."
+    local widgetKeys = {"controlState", "showOnOpen", "hideOnClose", "showOnClockClick", "resetPending"}
     local phase, generation = "testing", 1
     local restoreErrors = {}
     local checkByName = {}
@@ -80,6 +85,157 @@ function M.run(done, options)
         local ok, err = pcall(fn)
         if not ok then restoreErrors[#restoreErrors + 1] = name .. ": " .. tostring(err) end
         return ok
+    end
+    local function copy(value)
+        if type(value) ~= "table" then return value end
+        local result = {}
+        for key, item in pairs(value) do result[key] = copy(item) end
+        return result
+    end
+    local function same(a, b)
+        if type(a) ~= type(b) then return false end
+        if type(a) ~= "table" then return a == b end
+        for key, value in pairs(a) do if not same(value, b[key]) then return false end end
+        for key in pairs(b) do if a[key] == nil then return false end end
+        return true
+    end
+    local function validPreference(value)
+        return type(value) == "table" and value.ok == true and type(value.present) == "boolean"
+            and value.domain == "com.apple.WindowManager" and value.key == "StandardHideWidgets"
+            and (not value.present or ((value.type == "boolean" or value.type == "integer")
+                and (value.value == 0 or value.value == 1)))
+    end
+    local function preferenceMatches(a, b)
+        return validPreference(a) and validPreference(b) and a.present == b.present
+            and (not a.present or (a.type == b.type and a.value == b.value))
+    end
+    local function widgetSettingsMatch()
+        for _, key in ipairs(widgetKeys) do
+            if not same(hs.settings.get(widgetPrefix .. key), widgetSnapshot.settings[key]) then return false end
+        end
+        return true
+    end
+    local function restoreWidgets()
+        if not widgetTouched or not widgetSnapshot then return end
+        local snapshot = widgetSnapshot
+        local controllerRestored = true
+        local function recover(name, callback)
+            local ok = restoreCall("widget " .. name, callback)
+            controllerRestored = controllerRestored and ok
+            return ok
+        end
+        recover("stop", function() widgets.stop() end)
+        for name, setter in pairs({showOnOpen="setShowOnOpen", hideOnClose="setHideOnClose",
+                                   showOnClockClick="setShowOnClockClick"}) do
+            recover(name, function()
+                assert(widgets[setter](snapshot.status[name] == true) ~= false,
+                    "Widget setting restoration was rejected")
+            end)
+        end
+        for _, key in ipairs(widgetKeys) do
+            recover("stored " .. key, function()
+                if snapshot.settings[key] == nil then hs.settings.clear(widgetPrefix .. key)
+                else hs.settings.set(widgetPrefix .. key, copy(snapshot.settings[key])) end
+            end)
+        end
+        -- Rehydrate the original mode from its authoritative raw settings. Any
+        -- initial managed-mode write is synchronous; restore the one OS key LAST.
+        local restarted = recover("restart", function()
+            widgets.start()
+            if not snapshot.status.running then widgets.stop() end
+        end)
+        if not restarted or not controllerRestored then
+            recover("stop after controller restoration error", function() widgets.stop() end)
+        end
+        local restored, result = pcall(widgetPreferences.restore, copy(snapshot.preference))
+        local readOK, current = pcall(widgetPreferences.read)
+        local keyRestored = restored and type(result) == "table" and result.ok == true
+            and readOK and preferenceMatches(current, snapshot.preference)
+        local keyRetried = false
+        if not keyRestored then
+            keyRetried = true
+            restoreErrors[#restoreErrors + 1] = "widget visibility preference restoration was unconfirmed"
+            report.recoveryRequired = true
+            -- Keep observers stopped while making one bounded recovery retry.
+            -- Even if the key recovers, a running pretest controller is then not
+            -- fully restored and must remain an explicit failure.
+            recover("stop after unconfirmed restore", function() widgets.stop() end)
+            restored, result = pcall(widgetPreferences.restore, copy(snapshot.preference))
+            readOK, current = pcall(widgetPreferences.read)
+            keyRestored = restored and type(result) == "table" and result.ok == true
+                and readOK and preferenceMatches(current, snapshot.preference)
+        end
+        local statusOK, state = pcall(widgets.status)
+        local settingsOK, settingsRestored = pcall(widgetSettingsMatch)
+        controllerRestored = controllerRestored and settingsOK and settingsRestored and statusOK and type(state) == "table"
+            and state.running == snapshot.status.running and state.mode == snapshot.status.mode
+            and state.showOnOpen == snapshot.status.showOnOpen
+            and state.hideOnClose == snapshot.status.hideOnClose
+            and state.showOnClockClick == snapshot.status.showOnClockClick
+        if not controllerRestored then
+            restoreCall("widget stop after mismatched controller state", function() widgets.stop() end)
+            if not keyRetried then
+                restored, result = pcall(widgetPreferences.restore, copy(snapshot.preference))
+                readOK, current = pcall(widgetPreferences.read)
+                keyRestored = restored and type(result) == "table" and result.ok == true
+                    and readOK and preferenceMatches(current, snapshot.preference)
+            end
+        end
+        check("widget visibility preference restored", keyRestored,
+            {exactPresenceTypeAndValue = keyRestored == true})
+        check("widget control settings restored", controllerRestored,
+            {storedSettingsAndRuntimeMode = controllerRestored == true})
+        report.widgetDefaults.restorationVerified = keyRestored and controllerRestored
+        if not report.widgetDefaults.restorationVerified then report.recoveryRequired = true end
+        widgetSnapshot, widgetTouched = nil, false -- No original OS snapshot is persisted in the report.
+    end
+    local function runWidgetDefaults()
+        if widgetPreferences == nil then
+            report.widgetDefaults = {tested=false, reason="No native widget-preference test adapter supplied"}
+            return
+        end
+        assert(type(widgetPreferences.read) == "function" and type(widgetPreferences.write) == "function"
+            and type(widgetPreferences.restore) == "function", "Incomplete widget-preference test adapter")
+        widgets = assert(veil.widgets, "Widget controller unavailable")
+        local preference = widgetPreferences.read()
+        assert(validPreference(preference), "Cannot capture the original widget visibility preference safely")
+        local state = widgets.status()
+        assert(type(state) == "table" and type(state.running) == "boolean" and type(state.mode) == "string",
+            "Cannot capture the widget controller state safely")
+        local snapshot = {preference=copy(preference), status=copy(state), settings={}}
+        for _, key in ipairs(widgetKeys) do snapshot.settings[key] = copy(hs.settings.get(widgetPrefix .. key)) end
+        widgetSnapshot = snapshot
+        report.widgetDefaults = {tested=true,
+            scope="Fixed WindowManager/StandardHideWidgets key and five app-owned widget settings only",
+            setup="Flags exercised while observers are stopped; no synthetic clock or Notification Center action",
+            physicalUIQualified=false}
+        widgetTouched = true
+        widgets.stop()
+        assert(phase == "testing", "Widget acceptance cancelled")
+        for _, setter in ipairs({"setShowOnOpen", "setHideOnClose", "setShowOnClockClick"}) do
+            assert(widgets[setter](true) ~= false, "Cannot prepare widget control flags")
+            assert(phase == "testing", "Widget acceptance cancelled")
+        end
+        local seeded = widgetPreferences.write(1)
+        assert(phase == "testing", "Widget acceptance cancelled")
+        local before = widgetPreferences.read()
+        local seedConfirmed = type(seeded) == "table" and seeded.ok == true
+            and validPreference(before) and before.present and before.value == 1
+        check("widget visibility test seed confirmed", seedConfirmed)
+        assert(seedConfirmed, "Cannot confirm the bounded widget test preference")
+        local applied = widgets.useMacOSDefaults()
+        assert(phase == "testing", "Widget acceptance cancelled")
+        local after, state = widgetPreferences.read(), widgets.status()
+        local removed = applied == true and validPreference(after) and not after.present
+            and state.macOSDefaults == true and state.resetVerified == true
+        check("macOS widget defaults key removal verified", removed)
+        local stopped = not state.showOnOpen and not state.hideOnClose and not state.showOnClockClick
+            and not state.tracking and not state.changingVisibility and not state.preservingPanel
+            and (state.clock == nil or (not state.clock.running and not state.clock.watching))
+        check("macOS widget defaults disable app automation", stopped)
+        report.widgetDefaults.keyRemovalVerified = removed
+        report.widgetDefaults.automationStopped = stopped
+        assert(removed and stopped, "macOS widget defaults acceptance failed")
     end
     local function request(screen, state)
         local ok, value = pcall(function() return screen:setBrightness(state.target) end)
@@ -178,6 +334,7 @@ function M.run(done, options)
         else
             report.recoveryRequired = true
         end
+        restoreWidgets()
         check("restoration calls completed", #restoreErrors == 0, restoreErrors)
         check("tint settings restored", veil.enabled == old.enabled
             and math.abs(veil.opacity - old.opacity) < 0.0001
@@ -266,6 +423,7 @@ function M.run(done, options)
     end
 
     local ok, err = xpcall(function()
+        runWidgetDefaults()
         veil.setEnabled(false)
         check("tint disabled removes canvases", #veil.canvases == 0)
         veil.setEnabled(true)

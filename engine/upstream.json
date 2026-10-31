@@ -506,20 +506,64 @@
       "status": "App-owned synchronisation logic uses unmodified upstream native brightness APIs."
     },
     {
-      "capability": "Optional desktop widgets and clock controls",
+      "capability": "Desktop widget visibility and macOS defaults",
       "ownedSource": [
         "WallpaperVeil/core/desktop_widgets.lua",
+        "WallpaperVeil/native/native_ui.m",
+        "WallpaperVeil/native/widget_preferences.h"
+      ],
+      "upstreamSource": [
+        "LuaSkin/lua-5.4.7/src/lua.h",
+        "LuaSkin/lua-5.4.7/src/lauxlib.h"
+      ],
+      "status": "The widget preference boundary is app-owned native code. Product code no longer calls hs.task; the unchanged 95-component engine and complete legal notices are still bundled.",
+      "replacedBindingSource": [
+        "extensions/task/libtask.m"
+      ],
+      "priorProductSource": {
+        "commit": "aa4d8c7b65856d533b9b5fafdeb5d1ad78504b4a",
+        "path": "WallpaperVeil/app/desktop_widgets.lua"
+      },
+      "functionMapping": [
+        {
+          "prior": "startTask(), stopTask(), drain(): hs.task plus /usr/bin/defaults read/write",
+          "current": "core/desktop_widgets.lua: preferenceCall(), request(); native/native_ui.m: WVReadWidgetPreference(), WVWriteWidgetPreference(); native/widget_preferences.h: WVReadWidgetPreferenceInDomain(), WVWriteWidgetPreferenceInDomain()",
+          "change": "Retired the product subprocess adapter. Original app-owned synchronous CFPreferences code reads/writes only com.apple.WindowManager/StandardHideWidgets and verifies the result; no libtask implementation was copied."
+        },
+        {
+          "prior": "No master defaults action",
+          "current": "core/desktop_widgets.lua: useMacOSDefaults(), quiesce(), saveState(), clearResetGuard(); native/native_ui.m: WVResetWidgetDefaults(); native/widget_preferences.h: WVResetWidgetPreferenceInDomain()",
+          "change": "New app-owned behavior stops automation, clears its three flags, verifies its app-owned resetPending guard, then deletes/synchronizes/verifies absence of only the managed OS key. No production preference-snapshot restoration."
+        }
+      ]
+    },
+    {
+      "capability": "Optional clock and Notification Center observation",
+      "ownedSource": [
         "WallpaperVeil/core/desktop_widget_clock.lua",
-        "WallpaperVeil/core/desktop_widget_panel.lua"
+        "WallpaperVeil/core/desktop_widget_panel.lua",
+        "WallpaperVeil/core/desktop_widgets.lua"
       ],
       "upstreamSource": [
         "extensions/application",
         "extensions/axuielement",
         "extensions/eventtap",
         "extensions/window",
-        "extensions/task"
+        "extensions/screen",
+        "extensions/timer",
+        "extensions/settings"
       ],
-      "status": "App-owned behaviour with retained upstream bindings; real platform qualification remains separate."
+      "functionMapping": [
+        {
+          "current": "desktop_widget_clock.lua: clockAt(), observe(), scheduleInspection(), updatePermission(), stop()",
+          "status": "App-owned clock identification, permission/retry policy and cancellation still use retained AX/eventtap/timer/screen/application bindings."
+        },
+        {
+          "current": "desktop_widget_panel.lua: snapshot(), findClock(), reopen(), clearCache()",
+          "status": "App-owned geometry checks and bounded AXPress use retained window/application/AX bindings. No persistent clock preference is changed."
+        }
+      ],
+      "status": "Retained upstream native observation bindings are not a native port. Default mode starts none of this automation; actual clock/Notification Center behavior still needs platform qualification."
     },
     {
       "capability": "App identity, About, update UI and login",

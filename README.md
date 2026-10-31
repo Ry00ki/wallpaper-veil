@@ -17,7 +17,7 @@ Wallpaper Veil is distributed as **one self-contained `Wallpaper Veil.app`** for
 2. Expand the ZIP and drag **`Wallpaper Veil.app` into Applications**. Your personal `~/Applications` folder is also supported. Keep one installed copy.
 3. Open the app and use **◐ Veil** in the menu bar.
 
-That is the user installation. Python, Git, Xcode and a separate Hammerspoon installation are **not required to run the app**. Its native engine, Lua code and libraries travel inside the `.app`; settings are stored in Application Support. The release's checksum and JSON files are optional verification/provenance material, not extra items to install.
+That is the user installation. Python, Git, Xcode and a separate Hammerspoon installation are **not required to run the app**. Its native engine, Lua code and libraries travel inside the `.app`; writable app data lives in Application Support, with settings in its own macOS preferences domain. The release's checksum and JSON files are optional verification/provenance material, not extra items to install.
 
 The current previews are ad hoc signed and not notarized. macOS may block a downloaded preview; see [Apple's documented Open Anyway process](https://support.apple.com/en-us/102445). Optional desktop-widget/clock automation requires macOS Accessibility approval; tint controls do not require that permission. Developer ID signing/notarization remains separate distribution work.
 
@@ -50,6 +50,8 @@ Brightness sync requires native macOS brightness control. Third-party monitor su
 
 Look for **◐ Veil** in the menu bar; **○ Veil** indicates that the wallpaper tint is off. Open the menu for tint settings, display sync, optional desktop-widget and clock/Notification Center controls, and App settings. Quit and About Wallpaper Veil are available there too.
 
+**Desktop widgets → Use macOS defaults** stops Wallpaper Veil's widget/clock automation and resets its widget-visibility preference to the macOS built-in default. It clears the three automation choices. Select a clock/Notification Center option, or Show now/Hide now, to opt back into custom behaviour; compatible automation choices can be combined.
+
 ![Illustration of the Wallpaper Veil menu-bar item beside the battery and clock](docs/images/menu-bar.png)
 
 <details>
@@ -78,7 +80,7 @@ The maintained checkout contains Wallpaper Veil's own code and an explicit engin
 ```text
 WallpaperVeil/
   core/       application behaviour and lifecycle
-  native/     launcher, Cocoa UI and update checker
+  native/     launcher, UI and macOS integration
   assets/     application identity
   ci/         build and package tooling
   tests/      product regression tests

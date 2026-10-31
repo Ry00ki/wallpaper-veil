@@ -5,6 +5,7 @@
 #include "lua.h"
 #include "lauxlib.h"
 #import "update_check.h"
+#import "widget_preferences.h"
 
 // App-owned UI only. Never alter NSWindowController or another application's UI.
 static NSString * const WVName = @"Wallpaper Veil";
@@ -597,6 +598,57 @@ static int WVSaveAboutPreview(lua_State *L) {
     if (!saved) { lua_pushstring(L, (errorText ?: @"Unknown capture error").UTF8String); return 2; }
     return 1;
 }
+static int WVPushWidgetPreference(lua_State *L, NSDictionary *result) {
+    lua_newtable(L);
+    WVSetBoolean(L, "ok", [result[@"ok"] boolValue]);
+    if (result[@"present"]) WVSetBoolean(L, "present", [result[@"present"] boolValue]);
+    if (result[@"resetVerified"]) WVSetBoolean(L, "resetVerified", [result[@"resetVerified"] boolValue]);
+    if (result[@"value"]) { lua_pushinteger(L, [result[@"value"] integerValue]); lua_setfield(L, -2, "value"); }
+    WVSetString(L, "error", result[@"error"]);
+    WVSetString(L, "type", result[@"type"]);
+    WVSetString(L, "domain", WVWidgetPreferenceDomain);
+    WVSetString(L, "key", WVWidgetPreferenceKey);
+    return 1;
+}
+
+static int WVReadWidgetPreference(lua_State *L) {
+    luaL_argcheck(L, lua_gettop(L) == 0, 1, "no domain/key arguments are accepted");
+    return WVPushWidgetPreference(L, WVReadWidgetPreferenceInDomain(WVWidgetPreferenceDomain, &WVSystemWidgetPreferences));
+}
+
+static int WVWriteWidgetPreference(lua_State *L) {
+    luaL_argcheck(L, lua_gettop(L) == 1, 1, "one visibility value is required");
+    lua_Integer hidden = luaL_checkinteger(L, 1);
+    luaL_argcheck(L, hidden == 0 || hidden == 1, 1, "visibility must be 0 or 1");
+    return WVPushWidgetPreference(L, WVWriteWidgetPreferenceInDomain(WVWidgetPreferenceDomain,
+        (NSInteger)hidden, &WVSystemWidgetPreferences));
+}
+
+static int WVResetWidgetDefaults(lua_State *L) {
+    luaL_argcheck(L, lua_gettop(L) == 0, 1, "no domain/key arguments are accepted");
+    return WVPushWidgetPreference(L, WVResetWidgetPreferenceInDomain(WVWidgetPreferenceDomain, &WVSystemWidgetPreferences));
+}
+
+static int WVRestoreWidgetPreferenceForTest(lua_State *L) {
+    if (![[NSProcessInfo processInfo].environment[@"WV_SELF_TEST"] isEqual:@"1"])
+        return WVPushWidgetPreference(L, WVWidgetPreferenceFailure(@"Widget recovery is available only in --self-test"));
+    luaL_argcheck(L, lua_gettop(L) == 1 && lua_istable(L, 1), 1, "one captured widget test state is required");
+    lua_getfield(L, 1, "present");
+    luaL_argcheck(L, lua_isboolean(L, -1), 1, "present must be a boolean");
+    BOOL present = lua_toboolean(L, -1); lua_pop(L, 1);
+    NSMutableDictionary *state = [@{@"present": @(present)} mutableCopy];
+    if (present) {
+        lua_getfield(L, 1, "value");
+        lua_Integer value = luaL_checkinteger(L, -1);
+        luaL_argcheck(L, value == 0 || value == 1, 1, "value must be 0 or 1");
+        state[@"value"] = @((NSInteger)value); lua_pop(L, 1);
+        lua_getfield(L, 1, "type");
+        state[@"type"] = [NSString stringWithUTF8String:luaL_checkstring(L, -1)]; lua_pop(L, 1);
+    }
+    return WVPushWidgetPreference(L, WVRestoreWidgetPreferenceForTestInDomain(WVWidgetPreferenceDomain,
+        state, &WVSystemWidgetPreferences));
+}
+
 __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L) {
     static const luaL_Reg functions[] = {
         {"configure", WVConfigure}, {"showAbout", WVShowAbout},
@@ -607,7 +659,10 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
         {"loginStatus", WVLoginStatus}, {"setLaunchAtLogin", WVSetLaunchAtLogin},
         {"openLoginSettings", WVOpenLoginSettings},
         {"openAccessibilitySettings", WVOpenAccessibilitySettings},
-        {"accessibilitySettingsInfo", WVAccessibilitySettingsInfo}, {NULL, NULL}
+        {"accessibilitySettingsInfo", WVAccessibilitySettingsInfo},
+        {"widgetPreferenceRead", WVReadWidgetPreference}, {"widgetPreferenceWrite", WVWriteWidgetPreference},
+        {"resetWidgetDefaults", WVResetWidgetDefaults},
+        {"widgetPreferenceRestoreForTest", WVRestoreWidgetPreferenceForTest}, {NULL, NULL}
     };
     luaL_newlib(L, functions);
     return 1;

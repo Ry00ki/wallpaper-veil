@@ -324,8 +324,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
                               "engine/upstream.json": sha256(project / "engine/upstream.json"),
                               "standalone_contract.py": sha256(own / "standalone_contract.py"),
                               "version.json": sha256(own / "version.json"),
-                              **({"update_check.h": sha256(own / "native/update_check.h")}
-                                 if (own / "native/update_check.h").is_file() else {})},
+                              **{name: sha256(own / "native" / name) for name in ("update_check.h", "widget_preferences.h")}},
             "upstream_inputs": {"identity": upstream_inputs["identity"], "files": upstream_inputs["files"]},
             "component_notices": component_notices,
             "bundled_lua_hashes": code_hashes,

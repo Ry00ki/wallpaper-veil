@@ -174,6 +174,19 @@ class ArchiveContractTests(unittest.TestCase):
         with self.assertRaisesRegex(RuntimeError, 'Duplicate'):
             contract.validate_archive(self.path)
 
+    def test_case_aliases_are_rejected_before_extraction(self):
+        # Default macOS volumes map these distinct ZIP names to the same file.
+        # A second executable spelling must not replace the declared launcher.
+        self.archive([(self.ROOT + '/Contents/MacOS/launcher', 'replacement')])
+        with self.assertRaisesRegex(RuntimeError, 'ambiguous'):
+            contract.validate_archive(self.path)
+
+    def test_unicode_normalization_aliases_are_rejected_before_extraction(self):
+        self.archive([(self.ROOT + '/Contents/Resources/caf\u00e9.png', 'composed'),
+                      (self.ROOT + '/Contents/Resources/cafe\u0301.png', 'decomposed')])
+        with self.assertRaisesRegex(RuntimeError, 'ambiguous'):
+            contract.validate_archive(self.path)
+
     def test_relative_escape_via_symlink_chain_is_rejected(self):
         self.archive(links=[(self.ROOT + '/Contents/A', 'B/../../..'),
                             (self.ROOT + '/Contents/B', 'MacOS')])

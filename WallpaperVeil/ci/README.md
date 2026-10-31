@@ -135,8 +135,8 @@ strict signature verification; the package summary records both audits.
 
 These checks do not launch the app or establish Gatekeeper/notarization,
 permissions, a relocated/fresh-account launch or hardware behavior. The finished
-app contains its executable Lua/native code; writable settings live in
-Application Support. Release JSON/checksum files are verification records, not
+app contains its executable Lua/native code; writable app data lives in
+Application Support, with settings in its own macOS preferences domain. Release JSON/checksum files are verification records, not
 files an app user must install. Keep actual launch/relocation and feature
 qualification distinct from structural package proof.
 
