@@ -1,6 +1,6 @@
 -- Exercise deferred UI qualification cleanup with a virtual timer queue.
 -- No app, network, preference or display access.
-local path = arg[1] or 'WallpaperVeil/app/init.lua'
+local path = arg[1] or 'WallpaperVeil/core/init.lua'
 local file = assert(io.open(path)); local source=file:read('a'); file:close()
 local first=assert(source:find('    if os.getenv("WV_UI_TEST") == "1" then',1,true))
 local last=assert(source:find('    if os.getenv("WV_SELF_TEST") == "1" then',first,true))

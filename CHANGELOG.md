@@ -2,6 +2,13 @@
 
 Changes are grouped by release. This project has not published a stable release.
 
+## 0.1.7 preview - 31.10.26
+
+- Lead installation with one downloadable app: expand the ZIP, copy Wallpaper Veil.app to Applications and open it. Move developer-only setup into the development guide.
+- Consolidate product-owned Lua and native code into core/native directories; remove unused upstream projects, tests, vendored trees and tooling from the active checkout while preserving their history.
+- Recover only the exact pinned engine header/legal inputs during builds, retain all required notices and document ownership plus the future upstream-update process.
+- Audit internal native-library dependencies, bundle symlinks and the single-app ZIP structure during build and packaging.
+
 ## 0.1.6 preview - 31.10.26
 
 - Add **Use macOS defaults** to Desktop widgets: stop the app's widget/clock automation, clear its three choices and reset the one app-managed widget-visibility override to the macOS built-in default.

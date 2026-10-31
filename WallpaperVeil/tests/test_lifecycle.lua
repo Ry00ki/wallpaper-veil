@@ -1,5 +1,5 @@
 -- Deterministic lifecycle regressions. No live app, settings, AX or hardware.
-local root = arg[1] or 'WallpaperVeil/app'
+local root = arg[1] or 'WallpaperVeil/core'
 package.path = root .. '/?.lua;' .. package.path
 local report = {}
 local function check(name, expected, actual, detail)

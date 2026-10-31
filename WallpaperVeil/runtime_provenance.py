@@ -13,10 +13,8 @@ import stat
 import subprocess
 import zipfile
 
-SOURCE_COMMIT = "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
-SOURCE_PATHS = ("Hammerspoon", "LuaSkin", "Pods", "extensions", "scripts",
-                "Hammerspoon.xcodeproj", "Hammerspoon.xcworkspace", "Podfile", "Podfile.lock")
-EXPECTED_ARCHITECTURES = {"arm64", "x86_64"}
+from upstream import (SOURCE_COMMIT, ENGINE_TAG, ENGINE_BUILD, EXPECTED_ARCHITECTURES,
+                      validate_checkout, policy_identity)
 
 
 def sha256(path: Path) -> str:
@@ -157,7 +155,10 @@ def verify_runtime(project: Path, runtime: Path, manifest_path: Path | None = No
     """
     if (manifest_path is None) != (archive_path is None):
         raise RuntimeError("Source builds require both --source-engine-manifest and --source-engine-archive")
+    policy = validate_checkout(project, expected_commit=SOURCE_COMMIT)
     pin = json.loads((project / "WallpaperVeil/ci/runtime.json").read_text())
+    if pin.get("version") != policy["upstream"]["tag"] or pin.get("build") != policy["upstream"]["build"]:
+        raise RuntimeError("Official runtime and qualified upstream policy disagree")
     runtime_root = runtime.resolve()
     for relative in ("Contents/Info.plist", "Contents/MacOS/Hammerspoon", "Contents/Resources/setup.lua"):
         path = runtime / relative
@@ -194,7 +195,7 @@ def verify_runtime(project: Path, runtime: Path, manifest_path: Path | None = No
         if not isinstance(manifest, dict) or (type(manifest.get("schema")) is not int or manifest.get("schema") != 1) or manifest.get("kind") != "source-built-native-engine-proof":
             raise RuntimeError("Unsupported source-engine manifest schema/kind")
         if (manifest.get("upstreamCommit") != SOURCE_COMMIT or manifest.get("nativeCodeHead") != SOURCE_COMMIT
-                or manifest.get("upstreamTag") != "1.1.1"):
+                or manifest.get("upstreamTag") != policy["upstream"]["tag"]):
             raise RuntimeError("Source-engine native source does not match the audited baseline")
         if (manifest.get("configuration") != "Debug" or manifest.get("scheme") != "Release"
                 or manifest.get("signing") != "ad-hoc" or manifest.get("sanitizers") is not False
@@ -222,11 +223,8 @@ def verify_runtime(project: Path, runtime: Path, manifest_path: Path | None = No
         baseline_setup_sha = hashlib.sha256(baseline_setup).hexdigest()
         if setup_sha != baseline_setup_sha or ("setupSHA256" in declared and declared["setupSHA256"] != setup_sha):
             raise RuntimeError("Source-engine bootstrap does not match the audited native source")
-        # Keep the native input distinct from the current product-source HEAD.
-        # A locally edited native tree needs a freshly qualified engine build.
-        _command("/usr/bin/git", "-C", project, "diff", "--quiet", SOURCE_COMMIT, "--", *SOURCE_PATHS)
-        if _command("/usr/bin/git", "-C", project, "ls-files", "--others", "--exclude-standard", "--", *SOURCE_PATHS):
-            raise RuntimeError("Untracked native source files require a freshly qualified engine build")
+        # Native source is the verified historical tag, never an unregistered
+        # checkout copy or an undisclosed patch. The product has its own HEAD.
         if type(manifest.get("compiledMachOCount")) is not int or manifest["compiledMachOCount"] != 95:
             raise RuntimeError("Source-engine native binary inventory does not match the qualified baseline")
         magic = {bytes.fromhex(value) for value in ("feedface", "cefaedfe", "feedfacf", "cffaedfe",
@@ -258,8 +256,10 @@ def verify_runtime(project: Path, runtime: Path, manifest_path: Path | None = No
         receipt.update({"origin": "source-build", "engine_recompiled_from_source": True,
                         "source_manifest_sha256": hashlib.sha256(raw_manifest).hexdigest(),
                         "source_manifest": manifest, "native_source_tree_matches": True,
+                        "native_source_scope": "qualified historical Git tree",
                         "source_archive_inventory_verified": True})
 
     _command("/usr/bin/codesign", "--verify", "--deep", "--strict", runtime)
+    receipt["upstream_policy"] = policy_identity(policy)
     receipt["codesign_verified_deep_strict"] = True
     return receipt

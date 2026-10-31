@@ -1,5 +1,5 @@
 -- In-memory widget mode, failure and stale-callback checks. No system preferences.
-local source=arg[1] or 'WallpaperVeil/app/desktop_widgets.lua'
+local source=arg[1] or 'WallpaperVeil/core/desktop_widgets.lua'
 local count=0
 local prefix='wallpaperVeil.widgets.'
 local function equal(actual,expected,message)

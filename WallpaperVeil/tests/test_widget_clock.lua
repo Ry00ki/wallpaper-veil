@@ -1,5 +1,5 @@
 -- Real observer module with synthetic input and in-memory AX/timers only.
-local source=arg[1] or 'WallpaperVeil/app/desktop_widget_clock.lua'
+local source=arg[1] or 'WallpaperVeil/core/desktop_widget_clock.lua'
 local checks=0
 local function equal(actual,expected,message)
     checks=checks+1

@@ -1,5 +1,5 @@
 -- State/action regressions. No native app, macOS preferences or permission changes.
-local root = arg[1] or "WallpaperVeil/app"
+local root = arg[1] or "WallpaperVeil/core"
 local settings = assert(loadfile(root .. "/app_settings.lua"))()
 local assertions = 0
 local function check(value, message)

@@ -20,6 +20,8 @@ import zipfile
 OWN = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(OWN))
 import runtime_provenance as runtime
+import upstream
+from upstream_fixture import make_project
 
 
 def universal(suffix=b""):
@@ -33,16 +35,9 @@ class RuntimeInputTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory(prefix="wallpaper-veil-provenance-test-")
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        self.project = self.root / "project"
-        (self.project / "Hammerspoon").mkdir(parents=True)
-        (self.project / "Hammerspoon/setup.lua").write_bytes(b"fixture setup\n")
-        (self.project / "Hammerspoon/core.m").write_text("// native baseline\n")
-        subprocess.run(["/usr/bin/git", "init", "-q", str(self.project)], check=True)
-        subprocess.run(["/usr/bin/git", "-C", str(self.project), "add", "Hammerspoon"], check=True)
-        subprocess.run(["/usr/bin/git", "-C", str(self.project), "-c", "user.name=Wallpaper Veil tests",
-                        "-c", "user.email=tests@example.invalid", "commit", "-qm", "fixture native baseline"], check=True)
-        self.commit = subprocess.check_output(["/usr/bin/git", "-C", str(self.project), "rev-parse", "HEAD"], text=True).strip()
+        self.project, self.commit, policy_sha = make_project(self.root)
         self.addCleanup(patch.stopall)
+        patch.object(upstream, "QUALIFIED_POLICY_SHA256", policy_sha).start()
         patch.object(runtime, "SOURCE_COMMIT", self.commit).start()
         self.app = self.root / "Hammerspoon.app"
         (self.app / "Contents/MacOS").mkdir(parents=True)
@@ -143,6 +138,13 @@ class RuntimeInputTests(unittest.TestCase):
         self.assertEqual(receipt["origin"], "official-release")
         self.assertFalse(receipt["engine_recompiled_from_source"])
 
+    def test_official_input_cannot_bypass_native_override_policy(self):
+        self.engine.write_bytes(universal(b"official"))
+        file = self.project / "engine/patches/unregistered.patch"
+        file.parent.mkdir(); file.write_text("unregistered native change")
+        with self.assertRaisesRegex(RuntimeError, "Undeclared engine file"):
+            runtime.verify_runtime(self.project, self.app)
+
     def test_source_arguments_must_be_paired(self):
         for manifest, archive in ((self.manifest_path, None), (None, self.archive)):
             with self.subTest(manifest=bool(manifest)):
@@ -194,10 +196,12 @@ class RuntimeInputTests(unittest.TestCase):
         self.reject()
 
     def test_changed_native_source_requires_a_new_qualified_engine(self):
+        (self.project / "Hammerspoon").mkdir()
         (self.project / "Hammerspoon/core.m").write_text("// changed native implementation\n")
         self.reject()
 
     def test_untracked_native_header_is_rejected(self):
+        (self.project / "Hammerspoon").mkdir()
         (self.project / "Hammerspoon/injected.h").write_text("// unbuilt native source\n")
         self.reject()
 

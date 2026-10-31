@@ -1,5 +1,5 @@
 // An injected memory backend proves key/domain scope. No CFPreferences writes.
-#import "../widget_preferences.h"
+#import "../native/widget_preferences.h"
 static NSMutableDictionary *values;
 static BOOL syncOK = YES, discardWrites = NO;
 static NSUInteger reads, writes, syncs, checks;
