@@ -88,7 +88,7 @@ engine/       pinned upstream policy and integration map
 docs/         development and upstream-maintenance guides
 ```
 
-The app still bundles an engine derived from Hammerspoon 1.1.1. The unused upstream working-tree folders are removed from current main, while their original history/tag, licence and qualified engine-build source remain available. This is a smaller maintained checkout, not a claim that the underlying native engine has been replaced.
+The app still bundles an engine derived from Hammerspoon 1.1.1. The unused upstream working-tree folders are removed from current main, while their original history, licence and qualified engine-build source remain available. Builds fetch and verify the pinned upstream tag. This is a smaller maintained checkout, not a claim that the underlying native engine has been replaced.
 
 - [Build and development](docs/development.md): Python/Xcode requirements and local acceptance tools, for contributors.
 - [Architecture and ownership](docs/architecture.md): what is app-owned, adapted or retained.

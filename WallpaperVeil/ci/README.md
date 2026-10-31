@@ -41,6 +41,10 @@ and update the pin deliberately.
 
 ## Maintained source and historical engine inputs
 
+Both manual build workflows fetch the original upstream `1.1.1` tag and verify
+its exact commit before using it. The historical source remains in repository
+history; an ordinary clone need not already contain that tag.
+
 Product Lua is maintained under `WallpaperVeil/core/`; the launcher, native UI
 bridge and updater source are under `WallpaperVeil/native/`. The repository no
 longer maintains a second full upstream application, Xcode workspace, Pods tree

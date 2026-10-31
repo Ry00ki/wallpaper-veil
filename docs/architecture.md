@@ -30,7 +30,7 @@ The existing two-process startup arrangement is retained. A single `.app` can co
 | `engine/upstream.json` | Qualified source identity, input Git objects, baseline counts, allowed engine policy and feature integration map. |
 | `WallpaperVeil/tests/` | Product regressions, including provenance rejection and standalone-package contracts. |
 
-`Hammerspoon`, its Xcode projects/tests, `LuaSkin`, `Pods`, `extensions` and upstream tooling are absent from current main. Their exact original source remains in the retained `1.1.1` tag/history. A source-engine build checks out that audited history into temporary build staging. The product builder recovers only three C headers and the complete legal input set from verified Git objects; it does not require a second editable native tree in the maintained checkout.
+`Hammerspoon`, its Xcode projects/tests, `LuaSkin`, `Pods`, `extensions` and upstream tooling are absent from current main. Their exact original commit remains in repository history. Build checkouts fetch and verify the original upstream `1.1.1` tag; a source-engine build checks out that audited history into temporary staging. The product builder recovers only three C headers and the complete legal input set from verified Git objects; it does not require a second editable native tree in the maintained checkout.
 
 This removes 2,603 tracked legacy files, about 52.16 MB, from the active source checkout. Git history is intentionally preserved, so a full historical clone can still contain the old objects. It does not reduce the qualified native runtime's 95-component inventory or claim that all upstream code is now app-owned.
 

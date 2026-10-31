@@ -2,7 +2,7 @@
 
 ## Retained source identity
 
-The qualified engine is Hammerspoon **1.1.1 / build 6936**, commit `1469832361b4c3687ec7d589c1b4efe4d3b742ee`. Its source and history are retained at tag `1.1.1`; `engine/upstream.json` records its exact tree, original bootstrap and the Git identities of build/legal inputs. No native engine patches are qualified by this policy.
+The qualified engine is Hammerspoon **1.1.1 / build 6936**, commit `1469832361b4c3687ec7d589c1b4efe4d3b742ee`. Its original commit remains in repository history; build checkouts fetch and verify upstream tag `1.1.1`. `engine/upstream.json` records its exact tree, original bootstrap and the Git identities of build/legal inputs. No native engine patches are qualified by this policy.
 
 The source-engine builder compiles that historical checkout, not the current product tree. The active checkout no longer duplicates the upstream implementation. [Retired-tree inventory](upstream-retired-tree.json) records each removed root's former Git object, file count and bytes, including old tests, tooling and the unused crash-upload CLI. The objects remain available from their recorded historical commits. Original upstream [README](https://github.com/Hammerspoon/hammerspoon/blob/1.1.1/README.md), [contribution guidance](https://github.com/Hammerspoon/hammerspoon/blob/1.1.1/CONTRIBUTING.md) and all applicable terms remain authoritative for that source.
 

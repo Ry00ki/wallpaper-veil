@@ -23,6 +23,10 @@ jobs:
         with:
           fetch-depth: 0
           persist-credentials: false
+      - name: Obtain and verify pinned upstream source tag
+        run: |
+          git fetch --no-tags https://github.com/Hammerspoon/hammerspoon.git refs/tags/1.1.1:refs/tags/1.1.1
+          test "$(git rev-parse '1.1.1^{commit}')" = '1469832361b4c3687ec7d589c1b4efe4d3b742ee'
       - name: Verify runtime provenance and native release rules
         run: python3 -m unittest discover -s WallpaperVeil/tests -p 'test_*.py' -v
       - name: Compile and verify the pinned universal source engine

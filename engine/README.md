@@ -1,6 +1,6 @@
 # Bundled engine policy
 
-`upstream.json` is the qualified origin/input policy for Wallpaper Veil's bundled native engine. It pins the retained Hammerspoon source tag/commit/tree, bootstrap and 87 exact Git objects needed for product headers/legal documents, plus the current qualification inventories and feature integration map.
+`upstream.json` is the qualified origin/input policy for Wallpaper Veil's bundled native engine. It pins the qualified Hammerspoon source tag/commit/tree, bootstrap and 87 exact Git objects needed for product headers/legal documents, plus the current qualification inventories and feature integration map.
 
 The original native implementation lives in retained Git history, not an editable duplicate under current main. `WallpaperVeil/upstream.py` validates and materializes inputs into temporary build staging; `WallpaperVeil/ci/build_source_engine.py` compiles the pinned historical checkout when rebuilding is necessary.
 
