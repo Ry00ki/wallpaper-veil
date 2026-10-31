@@ -4,7 +4,8 @@ Changes are grouped by release. Stable releases and previews are listed separate
 
 ## 1.0.0 - 31.10.26
 
-- Check GitHub automatically when About opens; display independent stable and preview release choices.
+- Check GitHub once per actual startup and when About opens; display independent stable and preview release choices.
+- Show About only for a newer eligible version; remember dismissed/skipped versions and the user's startup-check opt-out across restarts.
 - Add native Download & Install with exact release-asset/build-receipt verification, safe extraction, atomic replacement, passive startup confirmation and rollback/recovery.
 - Preserve settings and the single installed runtime; no Python, Git, Xcode or separate engine is needed for updating.
 - Suspend pending brightness writes across system/display sleep and resume with a fresh confirmation window.
