@@ -21,7 +21,8 @@ local function scenario(mode)
       updateState=live and ((mode=='deadline' and cancelled==0) and 'checking' or (cancelled>0 and 'cancelled' or 'ahead')) or 'idle',
       updateInProgress=live and mode=='deadline' and cancelled==0}
   end
-  local native={openAccessibilitySettings=function() return true end,showAbout=function() end,closeAbout=function() closed=closed+1 end,
+  local autoChecks, installs=0,0
+  local native={testInstallUpdate=function(channel)assert(channel=="stable");installs=installs+1;return true end,testAutomaticAboutCheck=function()autoChecks=autoChecks+1;return true end,openAccessibilitySettings=function() return true end,showAbout=function() end,closeAbout=function() closed=closed+1 end,
     diagnostics=diagnostic,cancelUpdateCheck=function() cancelled=cancelled+1 end,
     checkForUpdates=function() live=true end,
     saveAboutPreview=function()
@@ -38,7 +39,7 @@ local function scenario(mode)
         latestURL='https://github.com/Ry00ki/wallpaper-veil/releases/tag/'..tag}
     end}
   local env=setmetatable({appSettings={menuItems=function() return {} end},nativeUI=native,support='/mock',after=after,
-    os={getenv=function() return '1' end,date=os.date},
+    os={getenv=function(key)if key=='WV_UPDATE_TEST_CHANNEL' then return mode=='install' and 'stable' or '' end;return '1' end,date=os.date},
     hs={timer={secondsSinceEpoch=function() return now end},json={encode=function(x) return x end},printf=function() end},
     writeReport=function(value,target)
       if target=='/mock/update-check.json' then
@@ -56,10 +57,12 @@ local function scenario(mode)
   end
   assert(reports['/mock/ui-check.json'].ok,'fixture qualification failed in '..mode)
   local result=assert(reports['/mock/update-check.json'],'missing terminal receipt in '..mode)
-  assert(closed>0,'About left open in '..mode)
-  if mode=='success' then
+  if mode=='install' then assert(closed==0 and installs==1 and result.updateInstallationRequested,'Active update was cancelled by qualification cleanup')
+  else assert(closed>0,'About left open in '..mode)end
+  if mode=='success' or mode=='install' then
     assert(result.ok and cancelled==0,'success was canceled or failed')
-    assert(result.desktopControlSettingsDispatched,'Settings destination was not dispatched')
+    assert(result.desktopControlSettingsDispatched==false,'Unchanged permission route was unexpectedly opened')
+    assert(autoChecks==1,'Automatic About check was not qualified once')
   else
     assert(not result.ok and cancelled>0,'error not canceled/failed in '..mode)
     assert(result.error and #result.error>0,'terminal cause absent in '..mode)
@@ -67,5 +70,5 @@ local function scenario(mode)
   if mode=='deadline' then assert(result.qualificationTimedOut and not result.updateInProgress) end
   count=count+1; print('PASS UI poll '..mode)
 end
-for _,mode in ipairs({'success','diagnostics','capture','write','deadline'}) do scenario(mode) end
+for _,mode in ipairs({'success','diagnostics','capture','write','deadline','install'}) do scenario(mode) end
 print('PASS '..count..' deferred UI cleanup scenarios')

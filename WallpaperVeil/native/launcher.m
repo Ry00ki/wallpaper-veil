@@ -9,6 +9,7 @@
 #include <sys/file.h>
 #include <sys/stat.h>
 #include <unistd.h>
+#import "update_transaction.h"
 
 static NSString * const WVBundleID = @"com.ry00ki.wallpaperveil";
 static NSString * const WVLauncherBundleID = @"com.ry00ki.wallpaperveil.launcher";
@@ -152,9 +153,20 @@ int main(int argc, const char *argv[]) {
     @autoreleasepool {
         umask(0077);
         BOOL verifyOnly = NO, selfTest = NO, uiTest = NO;
+        NSString *updateJob=nil,*updateNonce=nil,*updateTestChannel=nil;
         NSString *loginCommand = nil;
         for (int i = 1; i < argc; i++) {
-            if (strcmp(argv[i], "--verify-only") == 0) verifyOnly = YES;
+            if(strcmp(argv[i],"--update-relaunch")==0){
+                if(updateJob||i+2>=argc)fail(@"Invalid update relaunch arguments",64);
+                updateJob=[NSString stringWithUTF8String:argv[++i]];updateNonce=[NSString stringWithUTF8String:argv[++i]];
+            }
+            else if(strcmp(argv[i],"--update-test")==0){
+                if(i+1>=argc||updateTestChannel)fail(@"Choose one update-test channel",64);
+                updateTestChannel=[NSString stringWithUTF8String:argv[++i]];
+                if(![@[@"stable",@"preview"] containsObject:updateTestChannel])fail(@"Unknown update-test channel",64);
+                uiTest=YES;
+            }
+            else if (strcmp(argv[i], "--verify-only") == 0) verifyOnly = YES;
             else if (strcmp(argv[i], "--self-test") == 0) selfTest = YES;
             else if (strcmp(argv[i], "--ui-test") == 0) uiTest = YES;
             else if (strcmp(argv[i], "--login-status") == 0 || strcmp(argv[i], "--enable-login") == 0 ||
@@ -165,9 +177,9 @@ int main(int argc, const char *argv[]) {
             }
             else if (strncmp(argv[i], "-psn_", 5) != 0) fail(@"Supported options: --verify-only, --self-test, --ui-test, --login-status, --enable-login, --disable-login", 64);
         }
-        if (loginCommand && (verifyOnly || selfTest || uiTest))
+        if (loginCommand && (verifyOnly || selfTest || uiTest || updateJob))
             return loginFailure(loginCommand, @"Login-item commands cannot be combined with verification modes", 64);
-        if ((int)verifyOnly + (int)selfTest + (int)uiTest > 1) fail(@"Choose one verification mode", 64);
+        if ((int)verifyOnly + (int)selfTest + (int)uiTest + (int)(updateJob!=nil) > 1) fail(@"Choose one verification mode", 64);
         NSBundle *bundle = NSBundle.mainBundle;
         if (![bundle.bundleIdentifier isEqualToString:WVLauncherBundleID]) {
             if (loginCommand) return loginFailure(loginCommand, @"Run this command from the outer Wallpaper Veil.app launcher", 78);
@@ -195,6 +207,30 @@ int main(int argc, const char *argv[]) {
         if (log > STDERR_FILENO) close(log);
         fprintf(stderr, "\nWallpaper Veil NSWorkspace launcher: %s; verify=%d; self-test=%d\n",
                 NSDate.date.description.UTF8String, verifyOnly, selfTest);
+        NSURL *jobURL=updateJob?[NSURL fileURLWithPath:updateJob isDirectory:YES]:nil;
+        NSError *updateError=nil;
+        if(updateJob&&!WVAuthorizeUpdateLaunch(jobURL,updateNonce,bundle.bundleURL,&updateError))
+            fail(updateError.localizedDescription?:@"This update relaunch is not authorised",78);
+        int updateGate=privateFile([runtime stringByAppendingPathComponent:@"update.lock"],O_RDWR|O_CLOEXEC);
+        BOOL ownsUpdateGate=flock(updateGate,LOCK_EX|LOCK_NB)==0;
+        if(!ownsUpdateGate&&!updateJob)fail(@"Wallpaper Veil is being updated. Please wait for it to restart.",75);
+        if(ownsUpdateGate&&updateJob)fail(@"The update installer is no longer active",78);
+        if(ownsUpdateGate){
+            NSURL *pointer=[NSURL fileURLWithPath:[runtime stringByAppendingPathComponent:@"active-update.json"]];
+            if([NSFileManager.defaultManager fileExistsAtPath:pointer.path]){
+                NSDictionary *active=WVReadPrivateUpdateJSON(pointer,&updateError);
+                NSURL *recoverJob=[NSURL fileURLWithPath:[active[@"jobDir"] isKindOfClass:NSString.class]?active[@"jobDir"]:@""];
+                NSDictionary *request=active?WVUpdateRequestForJob(recoverJob,&updateError):nil;
+                if(!request||![active[@"nonce"] isEqual:request[@"nonce"]]||
+                    ![request[@"targetApp"] isEqual:bundle.bundleURL.URLByStandardizingPath.path]||
+                    ![WVUPSHAFile([recoverJob URLByAppendingPathComponent:@"WallpaperVeilUpdater"],&updateError) isEqual:request[@"helperSHA256"]])
+                    fail(updateError.localizedDescription?:@"An interrupted update needs recovery; its private recovery data was kept",78);
+                NSTask *recovery=[NSTask new];recovery.executableURL=[NSURL fileURLWithPath:request[@"helperPath"]];recovery.arguments=@[@"--recover",request[@"jobDir"]];
+                close(updateGate);
+                if(![recovery launchAndReturnError:&updateError])fail(updateError.localizedDescription?:@"Could not start update recovery",71);
+                return 0;
+            }
+        }
         int lock = privateFile([runtime stringByAppendingPathComponent:@"launch.lock"], O_RDWR | O_CLOEXEC);
         if (flock(lock, LOCK_EX | LOCK_NB) != 0) {
             if (errno == EWOULDBLOCK) fail(@"Another Wallpaper Veil launch is in progress", 75);
@@ -202,7 +238,7 @@ int main(int argc, const char *argv[]) {
         }
         for (NSRunningApplication *app in [NSRunningApplication runningApplicationsWithBundleIdentifier:WVBundleID]) {
             if (app.terminated) continue;
-            if (verifyOnly || selfTest || uiTest) fail(@"Close Wallpaper Veil before running verification or self-test", 75);
+            if (verifyOnly || selfTest || uiTest || updateJob) fail(@"Close Wallpaper Veil before running verification or self-test", 75);
             if (![app.bundleURL.URLByStandardizingPath isEqual:helperURL.URLByStandardizingPath]) {
                 fail(@"A different Wallpaper Veil runtime is already running; quit it before this version", 75);
             }
@@ -210,7 +246,7 @@ int main(int argc, const char *argv[]) {
             if (dprintf(pidFile, "%d\n", app.processIdentifier) < 0) fail(@"Cannot record the existing runtime", 74);
             close(pidFile);
             [app activateWithOptions:NSApplicationActivateIgnoringOtherApps];
-            close(lock);
+            close(lock);close(updateGate);
             return 0;
         }
         if (!verifyOnly) migratePreferences();
@@ -223,7 +259,10 @@ int main(int argc, const char *argv[]) {
             @"WV_APPLICATION_SUPPORT": support,
             @"WV_VERIFY_ONLY": verifyOnly ? @"1" : @"0",
             @"WV_SELF_TEST": selfTest ? @"1" : @"0",
-            @"WV_UI_TEST": uiTest ? @"1" : @"0"
+            @"WV_UI_TEST": uiTest ? @"1" : @"0",
+            @"WV_UPDATE_TEST_CHANNEL": updateTestChannel?:@"",
+            @"WV_UPDATE_TRANSACTION": updateJob?:@"",
+            @"WV_UPDATE_NONCE": updateNonce?:@""
         };
         configuration.arguments = @[
             @"-MJConfigFile", [runtime stringByAppendingPathComponent:@"init.lua"],
@@ -265,7 +304,7 @@ int main(int argc, const char *argv[]) {
         close(pidFile);
         fprintf(stderr, "Launched native runtime PID %d at %s\n", runtimeApp.processIdentifier, helperURL.path.fileSystemRepresentation);
         fflush(NULL);
-        close(lock);
+        close(lock);close(updateGate);
         return 0;
     }
 }

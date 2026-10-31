@@ -71,6 +71,67 @@ int main(void) {
         check(!WVReleasePageHasNext(@{@"Link": @"<https://api.github.com/ignored>; rel=\"last\""}, 1), @"last only completes");
         check(WVReleasePageHasNext(@{}, 100), @"full page cannot falsely report latest");
         check(!WVReleasePageHasNext(@{}, 99), @"short final page completes");
+        NSString *sha = [@"" stringByPaddingToLength:64 withString:@"a" startingAtIndex:0];
+        NSMutableDictionary *(^installable)(NSString *, BOOL) = ^(NSString *tag, BOOL preview) {
+            NSMutableDictionary *r = [release(tag, NO, preview) mutableCopy];
+            r[@"id"] = @10;
+            NSString *zipName = preview ? @"wallpaper-veil-preview.zip" : @"wallpaper-veil.zip";
+            r[@"assets"] = @[
+                @{@"id": @11, @"name": zipName, @"state": @"uploaded", @"size": @100,
+                  @"digest": [@"sha256:" stringByAppendingString:sha], @"browser_download_url": WVUpdateAssetURL(tag, zipName)},
+                @{@"id": @12, @"name": @"wallpaper-veil-build.json", @"state": @"uploaded", @"size": @200,
+                  @"digest": [@"sha256:" stringByAppendingString:sha], @"browser_download_url": WVUpdateAssetURL(tag, @"wallpaper-veil-build.json")}];
+            return r;
+        };
+        NSDictionary *stable = installable(@"v1.0.0", NO), *preview = installable(@"v1.1.0-preview.2", YES);
+        NSDictionary *catalog = WVUpdateCatalog(@[preview, stable], @"v1.0.0-preview.1");
+        check([catalog[@"stable"][@"latestTag"] isEqual:@"v1.0.0"] && [catalog[@"stable"][@"canInstall"] boolValue], @"preview can promote to stable");
+        check([catalog[@"preview"][@"latestTag"] isEqual:@"v1.1.0-preview.2"], @"separate preview catalog");
+        state(WVUpdateCatalog(@[stable], @"v0.9.0")[@"preview"], @"no-release", @"preview never falls back to stable");
+        state(WVUpdateCatalog(@[preview], @"v0.9.0")[@"stable"], @"no-release", @"stable never takes preview");
+        catalog = WVUpdateCatalog(@[stable], @"v2.0.0-preview.1");
+        check(![catalog[@"stable"][@"canInstall"] boolValue] && [catalog[@"stable"][@"state"] isEqual:@"ahead"], @"channel switch cannot downgrade");
+        check(![WVUpdateCatalog(@[stable], @"v1.0.0")[@"stable"][@"canInstall"] boolValue], @"current is not reinstallable");
+        NSDictionary *descriptor = WVUpdateCatalog(@[stable], @"v0.9.0")[@"stable"][@"descriptor"];
+        check(WVValidateDownloadDescriptor(descriptor), @"bound install descriptor");
+        for (id value in @[@0, @YES, @1.5, @(-1), NSNull.null]) {
+            NSMutableDictionary *bad = [descriptor mutableCopy]; bad[@"size"] = value;
+            check(!WVValidateDownloadDescriptor(bad), @"invalid download size rejected");
+        }
+        for (NSString *key in @[@"name", @"channel", @"version", @"receiptAsset", @"sha256"]) {
+            NSMutableDictionary *bad = [descriptor mutableCopy]; bad[key] = NSNull.null;
+            check(!WVValidateDownloadDescriptor(bad), @"malformed descriptor type rejected");
+        }
+        NSMutableDictionary *wrongName = [descriptor mutableCopy];
+        wrongName[@"name"] = @"wallpaper-veil-preview.zip";
+        wrongName[@"url"] = WVUpdateAssetURL(@"v1.0.0", @"wallpaper-veil-preview.zip");
+        check(!WVValidateDownloadDescriptor(wrongName), @"stable cannot consume preview-named ZIP");
+        NSMutableDictionary *missing = installable(@"v1.2.0", NO);
+        missing[@"assets"] = @[];
+        state(WVUpdateCatalog(@[stable, missing], @"v0.9.0")[@"stable"], @"error", @"latest incomplete release does not fall back");
+        NSMutableDictionary *duplicate = installable(@"v1.0.0", NO);
+        duplicate[@"assets"] = [duplicate[@"assets"] arrayByAddingObject:duplicate[@"assets"][0]];
+        state(WVUpdateCatalog(@[duplicate], @"v0.9.0")[@"stable"], @"error", @"duplicate ZIP rejected");
+        NSMutableDictionary *oldA = installable(@"v0.8.0", NO), *oldB = installable(@"v0.8.0", NO);
+        oldB[@"id"] = @22;
+        check([WVUpdateCatalog(@[oldA, oldB, stable], @"v0.9.0")[@"stable"] isEqual:WVUpdateCatalog(@[stable, oldB, oldA], @"v0.9.0")[@"stable"]], @"older ambiguity cannot make catalog feed-order dependent");
+        NSMutableDictionary *wrongFlag = installable(@"v1.0.0-preview.1", NO);
+        state(WVUpdateCatalog(@[wrongFlag], @"v0.9.0")[@"preview"], @"no-release", @"preview requires matching prerelease flag");
+        NSMutableDictionary *mutableRelease = installable(@"v1.0.0", NO);
+        NSMutableString *mutableURL = [WVUpdateAssetURL(@"v1.0.0", @"wallpaper-veil.zip") mutableCopy];
+        NSMutableDictionary *mutableAsset = [mutableRelease[@"assets"][0] mutableCopy]; mutableAsset[@"browser_download_url"] = mutableURL;
+        mutableRelease[@"assets"] = @[mutableAsset, mutableRelease[@"assets"][1]];
+        NSDictionary *frozen = WVUpdateCatalog(@[mutableRelease], @"v0.9.0")[@"stable"][@"descriptor"];
+        [mutableURL appendString:@"?changed=1"];
+        check(WVValidateDownloadDescriptor(frozen), @"selected descriptor cannot mutate with API objects");
+        check(WVUpdateDownloadURLAllowed([NSURL URLWithString:descriptor[@"url"]], descriptor, NO), @"canonical initial URL");
+        check(WVUpdateDownloadURLAllowed([NSURL URLWithString:@"https://release-assets.githubusercontent.com/signed/asset?token=abc"], descriptor, YES), @"permitted GitHub CDN redirect");
+        for (NSString *url in @[@"http://github.com/Ry00ki/wallpaper-veil/releases/download/v1.0.0/wallpaper-veil.zip",
+            @"https://github.com/other/repo/releases/download/v1.0.0/wallpaper-veil.zip", @"https://release-assets.githubusercontent.com.evil.invalid/asset",
+            @"https://user@release-assets.githubusercontent.com/asset", @"https://release-assets.githubusercontent.com:444/asset",
+            @"https://evil.invalid/asset", @"https://github.com/Ry00ki/wallpaper-veil/releases/download/v1.0.0/wallpaper-veil.zip?x=1"]) {
+            check(!WVUpdateDownloadURLAllowed([NSURL URLWithString:url], descriptor, YES), @"untrusted asset redirect rejected");
+        }
         printf("PASS: %lu native update-check assertions\n", (unsigned long)assertions);
     }
     return 0;

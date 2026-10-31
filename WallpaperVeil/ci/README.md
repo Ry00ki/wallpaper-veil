@@ -14,7 +14,8 @@ runs only through **Run workflow**. It downloads the official runtime pinned in
 `runtime.json`, checks its SHA-256 and original signature, compiles the native
 launcher and UI bridge, and packages the nested application. It verifies the code
 signatures and the standalone bundle contract again after extracting
-`wallpaper-veil-preview.zip`, then uploads
+a channel-specific ZIP (`wallpaper-veil-preview.zip` for previews,
+`wallpaper-veil.zip` for stable releases), then uploads
 Actions artifacts with a 14-day retention period. It never launches the app or
 exercises hardware. No release is published and no recurring schedule is enabled.
 
@@ -158,7 +159,7 @@ open -n "$HOME/Applications/Wallpaper Veil.app" --args --ui-test
 ```
 
 This mode opens About, checks native current/newer/error fixtures, then invokes
-the same manual action against public GitHub. It writes `ui-check.json` and
+the same discovery action against public GitHub, including an automatic-About-check fixture. It writes `ui-check.json` and
 `update-check.json` under Application Support. Normal startup performs no update
 check. The UI test's diagnostics use the signed version metadata.
 
@@ -168,3 +169,10 @@ download the ZIP/checksum, verify the received artifact and perform a fresh
 installed-app smoke check. The live updater should then identify the published
 tag as current. Retain a verified previous release ZIP and disclose unqualified
 hardware/permission cases.
+
+
+## Release channel and updater assets
+
+The version manifest decides the channel: stable `vX.Y.Z` uses `wallpaper-veil.zip`; preview `vX.Y.Z-preview.N` uses `wallpaper-veil-preview.zip`. Both emit the matching `.sha256`, build/package JSON and engine-origin receipt. Product packaging includes the app-owned updater helper and validates its signed executable hash. A stable project release can still be ad hoc signed/unnotarized; that fact must stay explicit until Developer ID/notarization is available.
+
+About-on-open discovery and native Download & Install replace the old manual-browser-only update feature. The updater binds the public ZIP and build receipt to GitHub asset IDs/digests and preserves the old app through passive startup confirmation. Its customer path uses no developer tools. See [update architecture and qualification](../../docs/updating.md).

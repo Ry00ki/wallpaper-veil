@@ -44,7 +44,8 @@ local function fresh()
     end},
     screen={allScreens=function()return {{fullFrame=function()return {x=0,y=0,w=1000,h=800}end}}end,
       watcher={new=function(cb)return watcher(w.screenWatchers,cb)end}},
-    caffeinate={watcher={systemDidWake=1,screensDidWake=2,new=function(cb)return watcher(w.wakeWatchers,cb)end}},
+    caffeinate={watcher={systemDidWake=1,screensDidWake=2,systemWillSleep=3,screensDidSleep=4,
+      new=function(cb)return watcher(w.wakeWatchers,cb)end}},
     canvas={windowLevels={desktopIcon=0},new=function(frame)
       if w.failCanvas then error('simulated canvas construction failure') end
       local c={rect=frame,visible=false,deleted=false}
@@ -86,7 +87,12 @@ do
 end
 local function runInit(failBrightness)
   local w=fresh();local v=veil(w);package.loaded.wallpaper_veil=v
-  package.loaded.display_brightness_sync={start=function()if failBrightness then error('mock brightness startup failure')end;return {stop=function()w.syncStop=true end}end}
+  package.loaded.display_brightness_sync={
+    start=function()if failBrightness then error('mock brightness startup failure')end end,
+    stop=function()w.syncStop=true end,
+    suspend=function(reason)w.suspensions=(w.suspensions or 0)+1;w.lastSuspend=reason end,
+    resume=function(reason)w.resumptions=(w.resumptions or 0)+1;w.lastResume=reason end,
+  }
   local getenv,loadlib,open,rename=os.getenv,package.loadlib,io.open,os.rename
   io.open=function()return {write=function()end,close=function()end}end
   os.rename=function()return true end
@@ -102,6 +108,23 @@ do
   local w=runInit(false);assert(hs.shutdownCallback,w.report and w.report.error);hs.shutdownCallback();local active=0
   for _,t in ipairs(w.timers)do if t.running==true then active=active+1 end end
   check('App shutdown stops retained app-owned delayed timers',0,active)
+end
+do
+  local w=runInit(false)
+  local lifecycle=w.wakeWatchers[#w.wakeWatchers]
+  lifecycle.callback(hs.caffeinate.watcher.systemWillSleep)
+  check('App lifecycle forwards actual system sleep notification', 'system',w.lastSuspend)
+  lifecycle.callback(hs.caffeinate.watcher.screensDidSleep)
+  check('App lifecycle forwards actual display sleep notification', 'display',w.lastSuspend)
+  lifecycle.callback(hs.caffeinate.watcher.systemDidWake)
+  check('App lifecycle forwards actual system wake notification', 'system',w.lastResume)
+  lifecycle.callback(hs.caffeinate.watcher.screensDidWake)
+  check('App lifecycle forwards actual display wake notification', 'display',w.lastResume)
+  local before=w.resumptions
+  hs.shutdownCallback()
+  check('App cleanup stops the brightness lifecycle watcher',false,lifecycle.running)
+  lifecycle.callback(hs.caffeinate.watcher.systemDidWake)
+  check('Queued wake after app cleanup cannot resume brightness',before,w.resumptions)
 end
 do
   local w=runInit(true)

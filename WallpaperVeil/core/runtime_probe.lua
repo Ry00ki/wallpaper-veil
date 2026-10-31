@@ -223,8 +223,12 @@ function Probe.collect(options)
     end
     if expectedRoot then report.checks.loadedSourcesUnderExpectedRoot = sourcesUnderRoot end
     report.checks.brightnessTimerMatchesEnabledState = sync ~= nil and
-        ((sync.enabled == true and (report.timers.brightnessSync.running or {}).value == true) or
-         (sync.enabled ~= true and report.timers.brightnessSync.present == false))
+        ((sync.enabled == true and sync.suspended ~= true and
+            (report.timers.brightnessSync.running or {}).value == true) or
+         ((sync.enabled ~= true or sync.suspended == true) and
+            report.timers.brightnessSync.present == false))
+    report.checks.suspendedBrightnessHasNoPendingWrite = sync ~= nil and
+        (sync.suspended ~= true or sync.pending == nil)
     report.checks.canvasFramesMatchScreens = report.states.veil.ok and true or false
     local unmatched = {}
     for index, screen in ipairs(report.screens) do unmatched[index] = screen.frame.value end

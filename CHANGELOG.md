@@ -1,6 +1,14 @@
 # Changelog
 
-Changes are grouped by release. This project has not published a stable release.
+Changes are grouped by release. Stable releases and previews are listed separately below.
+
+## 1.0.0 preview - 31.10.26
+
+- Check GitHub automatically when About opens; display independent stable and preview release choices.
+- Add native Download & Install with exact release-asset/build-receipt verification, safe extraction, atomic replacement, passive startup confirmation and rollback/recovery.
+- Preserve settings and the single installed runtime; no Python, Git, Xcode or separate engine is needed for updating.
+- Suspend pending brightness writes across system/display sleep and resume with a fresh confirmation window.
+- Keep actual clock/Spaces/sleep/hardware reconnect qualification open; Developer ID signing/notarization remains separate work.
 
 ## 0.1.7 preview - 31.10.26
 

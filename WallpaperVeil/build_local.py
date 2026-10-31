@@ -273,7 +273,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
                      "WVPrototypeType": prototype_type,
                      "WVRuntimeOrigin": runtime_receipt["origin"],
                      "WVRuntimeVersion": RUNTIME_VERSION, "WVRuntimeBuild": RUNTIME_BUILD,
-                     "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"],
+                     "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"], "WVUpdateProtocol": 1,
                      "WVUpstreamSourceCommit": SOURCE_COMMIT,
                      "NSHumanReadableCopyright": "Wallpaper Veil. Includes Hammerspoon and third-party software; see bundled acknowledgements."})
         with (runtime_contents / "Info.plist").open("wb") as stream:
@@ -288,7 +288,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
             "NSHumanReadableCopyright": info["NSHumanReadableCopyright"],
             "WVPrototypeType": info["WVPrototypeType"], "WVRuntimeBundleIdentifier": APP_ID,
             "WVRuntimeRelativePath": HELPER_RELATIVE_PATH,
-            "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"],
+            "WVReleaseTag": release["release_tag"], "WVReleaseChannel": release["release_channel"], "WVUpdateProtocol": 1,
         }
         icon = own / "assets/WallpaperVeil.icns"
         if not icon.is_file():
@@ -301,11 +301,15 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
         clang = run("/usr/bin/xcrun", "--find", "clang", capture=True)
         sdk = run("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path", capture=True)
         run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=13.0",
-            "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement", str(own / "native/launcher.m"), "-o", str(macos / "WallpaperVeil"))
+            "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement", "-framework", "Security", str(own / "native/launcher.m"), "-o", str(macos / "WallpaperVeil"))
         run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64",
             "-mmacosx-version-min=13.0", "-bundle", "-undefined", "dynamic_lookup",
             "-I", str(upstream_root / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement",
-            str(own / "native/native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
+            str(own / "native/native_ui.m"), str(own / "native/update_download.m"), "-framework", "Security", "-lz", "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
+        updater = contents / "Helpers/WallpaperVeilUpdater"
+        run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64",
+            "-mmacosx-version-min=13.0", "-framework", "Foundation", "-framework", "AppKit",
+            "-framework", "Security", "-lz", str(own / "native/updater.m"), "-o", str(updater))
         provenance = {
             "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": release["version"], "build": release["build"],
             "release_tag": release["release_tag"], "release_channel": release["release_channel"],
@@ -314,7 +318,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
             "runtime_relative_path": HELPER_RELATIVE_PATH,
             "launch_method": "NSWorkspace.openApplicationAtURL with early arguments and controlled WV environment",
             "launcher_is_permanent_supervisor": False,
-            "engine_recompiled_from_source": source_built, "launcher_recompiled_from_source": True, "ui_recompiled_from_source": True,
+            "engine_recompiled_from_source": source_built, "launcher_recompiled_from_source": True, "ui_recompiled_from_source": True, "updater_recompiled_from_source": True, "update_protocol": 1,
             "source": source,
             "runtime": {"input_bundle_name": runtime.name, **runtime_receipt},
             "source_hashes": {"launcher.m": sha256(own / "native/launcher.m"), "build_local.py": sha256(Path(__file__)),
@@ -324,7 +328,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
                               "engine/upstream.json": sha256(project / "engine/upstream.json"),
                               "standalone_contract.py": sha256(own / "standalone_contract.py"),
                               "version.json": sha256(own / "version.json"),
-                              **{name: sha256(own / "native" / name) for name in ("update_check.h", "widget_preferences.h")}},
+                              **{str(path.relative_to(own)): sha256(path) for path in sorted((own / "native").iterdir()) if path.suffix in {".h", ".m"}}},
             "upstream_inputs": {"identity": upstream_inputs["identity"], "files": upstream_inputs["files"]},
             "component_notices": component_notices,
             "bundled_lua_hashes": code_hashes,
@@ -354,6 +358,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
         report = dict(provenance)
         report.update({"output_bundle_name": output.name, "standalone_contract": standalone, "codesign_verified_deep_strict": True,
                        "signed_launcher_sha256": sha256(output / "Contents/MacOS/WallpaperVeil"),
+                       "signed_updater_sha256": sha256(output / "Contents/Helpers/WallpaperVeilUpdater"),
                        "signed_engine_sha256": sha256(output / HELPER_RELATIVE_PATH / "Contents/MacOS/WallpaperVeilRuntime")})
         report_path = output.with_suffix(".build.json")
         write_json(report_path, report)

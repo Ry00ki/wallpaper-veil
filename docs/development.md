@@ -4,7 +4,7 @@ For normal use, follow the three-step [app installation](../README.md#install-an
 
 ## How it runs
 
-Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Contributions, bug reports and feature requests are welcome. The product builder compiles Wallpaper Veil's launcher and native UI bridge, and accepts either the pinned official engine or a verified engine compiled from the audited source baseline. The manual source-engine build and product packaging retain separate provenance.
+Wallpaper Veil is based on the qualified Hammerspoon 1.1.1 engine, with stable and preview product channels. Contributions, bug reports and feature requests are welcome. The product builder compiles Wallpaper Veil's launcher, native UI bridge and native updater, and accepts either the pinned official engine or a verified engine compiled from the audited source baseline. The manual source-engine build and product packaging retain separate provenance.
 
 The app has a small Objective-C launcher, an app-owned Cocoa UI module and a nested native runtime app. The UI module provides the About window, repository/notices buttons and native app menu, and keeps inherited engine preferences/console windows outside normal product use. The launcher uses NSWorkspace to start that runtime with controlled app-code and state paths, then exits. It is not a permanent background supervisor.
 
@@ -91,3 +91,11 @@ Source checks parse the app Lua, compile Python and run deterministic regression
 For source-built engine inputs, the builder verifies the qualified native count, bootstrap, full archive inventory, architectures, signatures and notices against the source-engine manifest. The official-release route verifies its pinned main executable/bootstrap and original signatures; it does not apply the source-engine archive manifest to that separate input. The [standalone bundle contract](../WallpaperVeil/standalone_contract.py) checks internal native-library resolution and one-app ZIP layout. These packaging checks do not establish actual hardware, permission, login or lifecycle behavior.
 
 A source ZIP without Git history is not a build checkout. Normal users need only the packaged app; contributors need the pinned Git objects and the chosen verified engine input. See [upstream maintenance](upstream-maintenance.md) before changing the baseline or introducing native patches.
+
+## Native updater qualification
+
+[Update architecture and trust](updating.md) describes the release-channel rules and native transaction. `--ui-test` checks About, automatic checking, offline fixtures and the live public feed, without installing an update. It no longer opens the unchanged OS permission page as part of every UI run.
+
+Maintainers can use `--update-test stable` or `--update-test preview` from the installed outer launcher to exercise the actual UI download/install path for a newer published version. This is an **active app replacement and restart**, not passive diagnostics. Retain the previous verified ZIP, confirm the intended public target, and inspect the private transaction/health receipts plus resulting installed source identity. End users choose Download & Install in About; no command is required.
+
+Normal updating uses passive startup health only. Keep the existing hardware-changing `--self-test` as separate maintainer release acceptance; do not run it automatically during a customer's update. Physical clock/Spaces/sleep/display reconnection remain separate qualification issues.

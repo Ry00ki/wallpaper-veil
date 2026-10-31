@@ -1,7 +1,7 @@
 # Wallpaper Veil
 
 [![Source checks](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml/badge.svg)](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml)
-![Experimental preview](https://img.shields.io/badge/status-experimental%20preview-orange)
+![Release](https://img.shields.io/badge/release-1.0%20candidate-orange)
 
 Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
 
@@ -13,13 +13,13 @@ Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint ab
 
 Wallpaper Veil is distributed as **one self-contained `Wallpaper Veil.app`** for macOS 13 or later, on Apple Silicon and Intel Macs.
 
-1. Download **`wallpaper-veil-preview.zip`** from [Releases](https://github.com/Ry00ki/wallpaper-veil/releases).
+1. Download **`wallpaper-veil.zip`** from [Releases](https://github.com/Ry00ki/wallpaper-veil/releases) when the stable release is published. Interim preview builds use `wallpaper-veil-preview.zip` and are listed separately in [Releases](https://github.com/Ry00ki/wallpaper-veil/releases).
 2. Expand the ZIP and drag **`Wallpaper Veil.app` into Applications**. Your personal `~/Applications` folder is also supported. Keep one installed copy.
 3. Open the app and use **◐ Veil** in the menu bar.
 
 That is the user installation. Python, Git, Xcode and a separate Hammerspoon installation are **not required to run the app**. Its native engine, Lua code and libraries travel inside the `.app`; writable app data lives in Application Support, with settings in its own macOS preferences domain. The release's checksum and JSON files are optional verification/provenance material, not extra items to install.
 
-The current previews are ad hoc signed and not notarized. macOS may block a downloaded preview; see [Apple's documented Open Anyway process](https://support.apple.com/en-us/102445). Optional desktop-widget/clock automation requires macOS Accessibility approval; tint controls do not require that permission. Developer ID signing/notarization remains separate distribution work.
+Current builds are ad hoc signed and not notarized. The stable label describes the project release channel, not Apple signing or certification. macOS may block a downloaded app; see [Apple's documented Open Anyway process](https://support.apple.com/en-us/102445). Optional desktop-widget/clock automation requires macOS Accessibility approval; tint controls do not require that permission. Developer ID signing/notarization remains separate distribution work.
 
 [Report a bug](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=bug_report.yml) · [Portfolio overview](https://www.vincent-ry00ki.com/wallpaper-veil)
 
@@ -61,15 +61,19 @@ Look for **◐ Veil** in the menu bar; **○ Veil** indicates that the wallpaper
 
 </details>
 
-About Wallpaper Veil includes the repository and third-party notices, plus **Check for Updates** to compare the installed version with GitHub releases and open a newer release for manual updating.
+About Wallpaper Veil includes the repository and third-party notices, and checks GitHub automatically when it opens. Separate **Stable release** and **Preview** choices show the newest version in each channel; **Download & Install** verifies the download, replaces the app and restarts it. Stable is the recommended choice. Downloads and installation start only when you choose them.
 
-The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. A local two-display test passed brightness synchronization, independent adjustment and restoration. Actual launch at login was verified after reboot on macOS 27.0.1. Sleep/wake and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
+The 1.0 release candidate is tested on macOS 27.2 with Apple silicon and two native-brightness-capable Apple displays. Bundles target macOS 13+ and contain Apple silicon/Intel executables; other hardware/OS combinations are not yet covered by a supported-hardware matrix. Tint, brightness following, default widget mode and the update flow have release checks. Optional clock/Notification Center automation and actual sleep/Spaces/physical display-reconnect qualification remain open in [#3](https://github.com/Ry00ki/wallpaper-veil/issues/3) and [#4](https://github.com/Ry00ki/wallpaper-veil/issues/4). Launch at login was verified after reboot on macOS 27.0.1. Hardware brightness changes may be unsupported or fail; the app confirms them by read-back.
 
 ## Updating
 
-Quit Wallpaper Veil, replace the installed `.app` with the one from the new ZIP, then reopen it. Keep the previous release ZIP for recovery; avoid running copies from both Downloads and Applications.
+Open **About Wallpaper Veil**. It checks published GitHub releases automatically and shows stable releases separately from early-access previews. Choose **Download & Install** beside a newer version. Settings are kept; the old app is retained until the new app confirms normal startup, with recovery if it cannot start. No developer tools are required. Nothing is downloaded or installed merely by opening About.
 
-About Wallpaper Veil shows the installed version/build/channel. **Check for Updates** compares public GitHub releases and opens a newer eligible release for a manual download. Preview builds can see preview and stable releases; stable builds see stable releases. It does not download or replace the app automatically.
+Stable releases have tags such as `v1.0.0`; previews use `v1.0.1-preview.1` and GitHub's prerelease flag. Preview installation is an explicit choice, and the updater does not silently install an older/current version. The updater verifies the exact GitHub asset SHA-256, bound build receipt, safe package paths and nested code signatures. Current ad hoc builds trust this repository over HTTPS; independent publisher authentication via Developer ID/notarization remains [#7](https://github.com/Ry00ki/wallpaper-veil/issues/7).
+
+Versions before 1.0 need one manual replacement to gain the installer: quit the old copy, replace its `.app` with the new one and reopen it. Manual replacement also remains available when the installed folder is not writable. Keep the previous release ZIP for recovery and avoid running copies from both Downloads and Applications. macOS may request renewed approval for optional desktop automation after an ad hoc update.
+
+[Update verification and recovery](docs/updating.md) explains the native installation flow.
 
 For release notifications, choose **Watch → Custom → Releases** on GitHub. See [GitHub notification settings](https://docs.github.com/en/subscriptions-and-notifications/get-started/configuring-notifications).
 
