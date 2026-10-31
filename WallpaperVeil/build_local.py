@@ -23,14 +23,16 @@ import tempfile
 import uuid
 
 from runtime_provenance import verify_runtime
+from standalone_contract import audit_bundle
+from upstream import (SOURCE_COMMIT, ENGINE_TAG, ENGINE_BUILD, materialize_inputs,
+                      validate_checkout, policy_identity)
 
 APP_ID = "com.ry00ki.wallpaperveil"
 LAUNCHER_ID = "com.ry00ki.wallpaperveil.launcher"
 APP_NAME = "Wallpaper Veil"
 HELPER_RELATIVE_PATH = "Contents/Helpers/Wallpaper Veil Runtime.app"
-SOURCE_COMMIT = "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
-RUNTIME_VERSION = "1.1.1"
-RUNTIME_BUILD = "6936"
+RUNTIME_VERSION = ENGINE_TAG
+RUNTIME_BUILD = ENGINE_BUILD
 
 
 def run(*args: str, capture: bool = False) -> str:
@@ -53,13 +55,13 @@ def write_json(path: Path, value: dict) -> None:
 
 
 def checked_source(project: Path) -> dict:
+    policy = validate_checkout(project, expected_commit=SOURCE_COMMIT)
     actual = run("/usr/bin/git", "-C", str(project), "rev-parse", "HEAD", capture=True)
-    tag = run("/usr/bin/git", "-C", str(project), "rev-parse", "1.1.1^{commit}", capture=True)
-    if tag != SOURCE_COMMIT:
-        raise RuntimeError("The local source fork's 1.1.1 tag does not match the audited upstream commit")
-    # Own committed project work may advance HEAD after the initial source fork.
-    run("/usr/bin/git", "-C", str(project), "merge-base", "--is-ancestor", SOURCE_COMMIT, actual)
-    return {"upstream_tag": "1.1.1", "upstream_commit": tag, "local_head": actual,
+    return {"upstream_tag": policy["upstream"]["tag"],
+            "upstream_commit": policy["upstream"]["commit"],
+            "upstream_tree": policy["upstream"]["tree"],
+            "upstream_policy_sha256": policy_identity(policy)["policySHA256"],
+            "local_head": actual,
             "local_branch": run("/usr/bin/git", "-C", str(project), "branch", "--show-current", capture=True),
             "worktree_status": run("/usr/bin/git", "-C", str(project), "status", "--porcelain", capture=True).splitlines()}
 
@@ -141,58 +143,29 @@ def sign_bundle(app: Path) -> None:
     run("/usr/bin/codesign", "--verify", "--deep", "--strict", "--verbose=2", str(app))
 
 
-# Add this function beside the existing builder helpers. Path, shutil and the
-# existing sha256(path) helper are already imported/defined in build_local.py.
-def bundle_component_notices(project: Path, acknowledgements: Path) -> dict:
-    """Copy vendor legal files byte-for-byte, preserving source-relative paths."""
-    roots = ("extensions", "LuaSkin", "Pods")
-    stems = ("LICENSE", "LICENCE", "COPYING", "COPYRIGHT", "NOTICE", "UNLICENSE")
-    def conventional_name(name: str) -> bool:
-        upper = name.upper()
-        return any(upper == stem or any(upper.startswith(stem + separator)
-                   for separator in (".", "-", "_")) for stem in stems)
-
-    files = set()
-    for prefix in roots:
-        directory = project / prefix
-        if not directory.is_dir():
-            raise RuntimeError(f"Required component source directory missing: {prefix}")
-        for source in directory.rglob("*"):
-            if source.is_file() and not source.is_symlink() and conventional_name(source.name):
-                files.add(source)
-
-    # Upstream Lua's complete licence lives in this documentation page, not a
-    # conventional LICENSE file. Do not substitute a copy of its source headers.
-    lua_legal = project / "LuaSkin/lua-5.4.7/doc/readme.html"
-    if not lua_legal.is_file() or lua_legal.is_symlink():
-        raise RuntimeError("Audited Lua 5.4.7 legal documentation is missing")
-    files.add(lua_legal)
-    required = (
-        "extensions/menubar/LICENSE",
-        "extensions/screen/LICENSE",
-        "extensions/httpserver/LICENSE.timeout3",
-        "extensions/network/ping/LICENSE.SimplePing",
-        "extensions/mouse/manymouse/LICENSE.txt",
-        "Pods/Sentry/LICENSE.md",
-        "Pods/SocketRocket/LICENSE-examples",
-        "Pods/Sparkle/LICENSE",
-    )
-    for relative in required:
-        if project / relative not in files:
-            raise RuntimeError(f"Required component legal notice missing: {relative}")
-
+def bundle_component_notices(inputs: Path, acknowledgements: Path, policy: dict) -> dict:
+    """Retain every qualified component notice, with its original upstream path."""
     destination = acknowledgements / "Components"
-    counts = {prefix: 0 for prefix in roots}
+    counts = {prefix: 0 for prefix in ("extensions", "LuaSkin", "Pods")}
     manifest = []
-    for source in sorted(files):
-        relative = source.relative_to(project)
-        target = destination / relative
+    for entry in policy["componentNotices"]:
+        source = inputs / entry["path"]
+        if (not source.is_file() or source.is_symlink()
+                or not source.resolve().is_relative_to(inputs.resolve())):
+            raise RuntimeError("Required materialized component legal notice is missing")
+        raw = source.read_bytes()
+        blob = hashlib.sha1(b"blob " + str(len(raw)).encode("ascii") + b"\x00" + raw).hexdigest()
+        if blob != entry["blob"]:
+            raise RuntimeError("Materialized component legal notice changed")
+        target = destination / entry["path"]
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, target)
+        relative = Path(entry["path"])
         counts[relative.parts[0]] += 1
         manifest.append({"path": relative.as_posix(), "sha256": sha256(target)})
+    if len(manifest) != policy["qualification"]["componentNoticeCount"]:
+        raise RuntimeError("Qualified component legal notice count changed")
     return {"counts": counts, "total": len(manifest), "files": manifest}
-
 
 
 def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None = None,
@@ -214,11 +187,11 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
     source_built = runtime_receipt["engine_recompiled_from_source"]
     prototype_type = (("source-built native engine" if source_built else "binary-runtime prototype")
                       + " with NSWorkspace launcher and nested native application")
-    app_sources = own / "app"
+    app_sources = own / "core"
     if not (app_sources / "init.lua").is_file():
-        raise RuntimeError("WallpaperVeil/app/init.lua is missing")
-    if not (own / "launcher.m").is_file():
-        raise RuntimeError("WallpaperVeil/launcher.m is missing")
+        raise RuntimeError("WallpaperVeil/core/init.lua is missing")
+    if not (own / "native/launcher.m").is_file():
+        raise RuntimeError("WallpaperVeil/native/launcher.m is missing")
     if output.exists():
         marker = output / "Contents/Resources/wallpaper-veil-build.json"
         if not marker.is_file() or json.loads(marker.read_text()).get("bundle_id") not in {APP_ID, LAUNCHER_ID}:
@@ -227,6 +200,8 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
     stage_root = Path(tempfile.mkdtemp(prefix=".wallpaper-veil-stage-", dir=output.parent))
     stage = stage_root / output.name
     try:
+        upstream_inputs = materialize_inputs(project, stage_root / "upstream-inputs")
+        upstream_root, upstream_policy = upstream_inputs["root"], upstream_inputs["policy"]
         contents = stage / "Contents"
         outer_resources = contents / "Resources"
         macos = contents / "MacOS"
@@ -271,11 +246,11 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
             ("Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.plist",
              "Pods-Hammerspoon-acknowledgements.plist"),
         ]:
-            path = project / name
+            path = (upstream_root if name.startswith("Pods/") else project) / name
             if not path.is_file():
                 raise RuntimeError(f"Required licence or credit file is missing: {name}")
             shutil.copy2(path, acknowledgements / target_name)
-        component_notices = bundle_component_notices(project, acknowledgements)
+        component_notices = bundle_component_notices(upstream_root, acknowledgements, upstream_policy)
         removed_login_helpers = []
         login_items = runtime_contents / "Library/LoginItems"
         if login_items.exists():
@@ -326,11 +301,11 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
         clang = run("/usr/bin/xcrun", "--find", "clang", capture=True)
         sdk = run("/usr/bin/xcrun", "--sdk", "macosx", "--show-sdk-path", capture=True)
         run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64", "-mmacosx-version-min=13.0",
-            "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement", str(own / "launcher.m"), "-o", str(macos / "WallpaperVeil"))
+            "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement", str(own / "native/launcher.m"), "-o", str(macos / "WallpaperVeil"))
         run(clang, "-isysroot", sdk, "-fobjc-arc", "-O2", "-arch", "arm64", "-arch", "x86_64",
             "-mmacosx-version-min=13.0", "-bundle", "-undefined", "dynamic_lookup",
-            "-I", str(project / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement",
-            str(own / "native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
+            "-I", str(upstream_root / "LuaSkin/lua-5.4.7/src"), "-framework", "Foundation", "-framework", "AppKit", "-framework", "ServiceManagement",
+            str(own / "native/native_ui.m"), "-o", str(runtime_contents / "Frameworks/libWallpaperVeilUI.dylib"))
         provenance = {
             "bundle_id": LAUNCHER_ID, "runtime_bundle_id": APP_ID, "name": APP_NAME, "version": release["version"], "build": release["build"],
             "release_tag": release["release_tag"], "release_channel": release["release_channel"],
@@ -342,12 +317,16 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
             "engine_recompiled_from_source": source_built, "launcher_recompiled_from_source": True, "ui_recompiled_from_source": True,
             "source": source,
             "runtime": {"input_bundle_name": runtime.name, **runtime_receipt},
-            "source_hashes": {"launcher.m": sha256(own / "launcher.m"), "build_local.py": sha256(Path(__file__)),
-                              "native_ui.m": sha256(own / "native_ui.m"), "WallpaperVeil.icns": sha256(icon),
+            "source_hashes": {"launcher.m": sha256(own / "native/launcher.m"), "build_local.py": sha256(Path(__file__)),
+                              "native_ui.m": sha256(own / "native/native_ui.m"), "WallpaperVeil.icns": sha256(icon),
                               "runtime_provenance.py": sha256(own / "runtime_provenance.py"),
+                              "upstream.py": sha256(own / "upstream.py"),
+                              "engine/upstream.json": sha256(project / "engine/upstream.json"),
+                              "standalone_contract.py": sha256(own / "standalone_contract.py"),
                               "version.json": sha256(own / "version.json"),
-                              **({"update_check.h": sha256(own / "update_check.h")}
-                                 if (own / "update_check.h").is_file() else {})},
+                              **({"update_check.h": sha256(own / "native/update_check.h")}
+                                 if (own / "native/update_check.h").is_file() else {})},
+            "upstream_inputs": {"identity": upstream_inputs["identity"], "files": upstream_inputs["files"]},
             "component_notices": component_notices,
             "bundled_lua_hashes": code_hashes,
             "bundled_setup_sha256": sha256(resources / "setup.lua"),
@@ -360,6 +339,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
         write_json(outer_resources / "wallpaper-veil-build.json", provenance)
         write_json(resources / "wallpaper-veil-build.json", provenance)
         sign_bundle(stage)
+        standalone = audit_bundle(stage)
         prior = None
         if output.exists():
             prior = output.parent / (".wallpaper-veil-previous-" + uuid.uuid4().hex + ".app")
@@ -373,7 +353,7 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
         if prior:
             shutil.rmtree(prior)
         report = dict(provenance)
-        report.update({"output_bundle_name": output.name, "codesign_verified_deep_strict": True,
+        report.update({"output_bundle_name": output.name, "standalone_contract": standalone, "codesign_verified_deep_strict": True,
                        "signed_launcher_sha256": sha256(output / "Contents/MacOS/WallpaperVeil"),
                        "signed_engine_sha256": sha256(output / HELPER_RELATIVE_PATH / "Contents/MacOS/WallpaperVeilRuntime")})
         report_path = output.with_suffix(".build.json")

@@ -1,6 +1,6 @@
 local here = assert(debug.getinfo(1, "S").source:match("^@(.*/)"))
 local create = dofile(here .. "brightness_mock.lua")
-local app = os.getenv("WV_TEST_APP_DIR") or "WallpaperVeil/app"
+local app = os.getenv("WV_TEST_APP_DIR") or "WallpaperVeil/core"
 local cases = 0
 local function test(name, callback)
     callback(); cases = cases + 1; print("PASS acceptance: " .. name)

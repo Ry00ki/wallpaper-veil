@@ -1,6 +1,6 @@
 # Wallpaper Veil
 
-The maintained architecture, build and launch instructions are in the [repository README](../README.md). [CI instructions](ci/README.md) cover verified runtime downloads and manual preview builds.
+User installation is in the [repository README](../README.md). Maintained architecture, build and developer launch instructions are in the [development guide](../docs/development.md). [CI instructions](ci/README.md) cover verified runtime downloads and manual preview builds.
 
 The default development checkout is `~/Developer/Wallpaper Veil/wallpaper-veil`. The native About window includes the GitHub repository link and bundled licence access. The installed app can live at `~/Applications/Wallpaper Veil.app` and stores state under `~/Library/Application Support/Wallpaper Veil`. It does not load executable code from the source checkout or a separate Hammerspoon installation.
 

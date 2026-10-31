@@ -1,0 +1,538 @@
+{
+  "schema": 1,
+  "upstream": {
+    "repository": "https://github.com/Hammerspoon/hammerspoon.git",
+    "tag": "1.1.1",
+    "commit": "1469832361b4c3687ec7d589c1b4efe4d3b742ee",
+    "tree": "d62cc28d6d0ab3efbf59fc204fdd0dd4408d3f9e",
+    "build": "6936"
+  },
+  "qualification": {
+    "nativeBinaryCount": 95,
+    "componentNoticeCount": 81,
+    "architectures": [
+      "arm64",
+      "x86_64"
+    ],
+    "bootstrap": {
+      "path": "Hammerspoon/setup.lua",
+      "blob": "05bf89c50ab635cbd749937973b18fd5f23c7e2e",
+      "mode": "100644"
+    }
+  },
+  "patches": [],
+  "headers": [
+    {
+      "path": "LuaSkin/lua-5.4.7/src/lua.h",
+      "blob": "f050dac0913175c9d01f3ccb6a47ca0e9ab5c06a",
+      "mode": "100644"
+    },
+    {
+      "path": "LuaSkin/lua-5.4.7/src/lauxlib.h",
+      "blob": "5b977e2a39f13192dab2060cb4f4c1ce01bc1b5b",
+      "mode": "100644"
+    },
+    {
+      "path": "LuaSkin/lua-5.4.7/src/luaconf.h",
+      "blob": "f6301f4e29eda9418ff3b057dfaca5b26abcf518",
+      "mode": "100644"
+    }
+  ],
+  "componentNotices": [
+    {
+      "path": "LuaSkin/lua-5.4.7/doc/readme.html",
+      "blob": "3bcefadfe9aa750d0b1fc829e993e23fb21f6229",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/ASCIImage/LICENSE",
+      "blob": "4e6c6bcf8e4a5028ba5e1886bb542cce91473181",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/CocoaAsyncSocket/LICENSE.txt",
+      "blob": "ed3d60f809df5886a184bb5936c39c2f4cbdf061",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/CocoaHTTPServer/LICENSE.txt",
+      "blob": "64c3c902bf609d5c4ca007640bede18d45c37cff",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/CocoaLumberjack/LICENSE",
+      "blob": "27f20f7215f768683af79dc120ea717508fcb9a1",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/MIKMIDI/LICENSE",
+      "blob": "2278e241d6997cc8416f9db5395e3c7928cd4f1e",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/ORSSerialPort/LICENSE",
+      "blob": "d37f941c1b14f15cc099c54b81045af4c6fb2cc5",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/PocketSocket/LICENSE",
+      "blob": "d1c996fdf5e737043b9e1587a0522f0be4f5a60f",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/Sentry/LICENSE.md",
+      "blob": "6b2b8e3e46c66f2b0c3df06350d99964beea3ae8",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/SocketRocket/LICENSE",
+      "blob": "032b20673877f53f482e3318ca31c550cf18f313",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/SocketRocket/LICENSE-examples",
+      "blob": "1de78130549075932961c3880c6a7176e089e699",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/Sparkle/LICENSE",
+      "blob": "75e73f505ba688883cd7bba9aa4b11b56cc1bbae",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/alert/LICENSE",
+      "blob": "8ccfc86fbf2d23a52c5ac40a89dad46c7b93e8e4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/appfinder/LICENSE",
+      "blob": "d3af5460af5e688fdb2bfb24505c06caa97b1159",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/applescript/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/application/LICENSE",
+      "blob": "ffcf0c6f3fb00b26d526d8939a0561f7f8ae0565",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/audiodevice/LICENSE",
+      "blob": "e1cd67e206c6685276b37c0f9fe0985144cf3717",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/base64/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/battery/LICENSE",
+      "blob": "e1cd67e206c6685276b37c0f9fe0985144cf3717",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/brightness/LICENSE",
+      "blob": "e1cd67e206c6685276b37c0f9fe0985144cf3717",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/caffeinate/LICENSE",
+      "blob": "d3af5460af5e688fdb2bfb24505c06caa97b1159",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/chooser/LICENSE",
+      "blob": "dd6470beb64a9646394f5e3deb473df1acdb8c4e",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/crash/LICENSE",
+      "blob": "d3af5460af5e688fdb2bfb24505c06caa97b1159",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/deezer/LICENSE",
+      "blob": "82750c7f7132a7039b02a6981cc0c983dd7b4e58",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/dialog/LICENSE",
+      "blob": "085087865175f321fb6b78cecc10f86cd42384d6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/distributednotifications/LICENSE",
+      "blob": "ba5a955c0aa98b9d4ad13f233d14b39f865751d4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/doc/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/dockicon/LICENSE",
+      "blob": "f6ed3dff1a5840ac2505b3c4c6de81f80609877f",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/drawing/LICENSE",
+      "blob": "7d159ffb1292e4107cad4a00a6cb235466733329",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/eventtap/LICENSE.md",
+      "blob": "d3717dc5f7bd7fd9d9735c7696af9b7b53eadf55",
+      "mode": "100755"
+    },
+    {
+      "path": "extensions/fnutils/LICENSE",
+      "blob": "8ccfc86fbf2d23a52c5ac40a89dad46c7b93e8e4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/fs/LICENSE",
+      "blob": "8475345a64e5c353b6ba5184127815a1024e2f0e",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/geometry/LICENSE",
+      "blob": "8ccfc86fbf2d23a52c5ac40a89dad46c7b93e8e4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/grid/LICENSE",
+      "blob": "243a9e52916d756a09e5fcf0f9312cf482cb38dc",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/hash/LICENSE",
+      "blob": "a0bc4873d43633dea0429efbf95073ab80534cc3",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/hints/LICENSE",
+      "blob": "4458b9de9b51024b01b3243b13edd02e389f31a3",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/host/LICENSE",
+      "blob": "dd6470beb64a9646394f5e3deb473df1acdb8c4e",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/hotkey/LICENSE",
+      "blob": "8ccfc86fbf2d23a52c5ac40a89dad46c7b93e8e4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/httpserver/LICENSE",
+      "blob": "3527afccbe3e38cd2b5906b5a37b8ea7ce5af098",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/httpserver/LICENSE.timeout3",
+      "blob": "bf26cc50ef18d9cfaeca7d2558b52c6ca4e91254",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/inspect/LICENSE",
+      "blob": "555835c33312dd773778387d5e96c99b92b048b9",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/ipc/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/itunes/LICENSE",
+      "blob": "b19527d45b2c5f1c6b60c8fb75e3c2f3871a918d",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/javascript/LICENSE",
+      "blob": "9ec30a2a3b77aefc25bb52934df89b98a6635e52",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/json/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/keycodes/LICENSE",
+      "blob": "8ccfc86fbf2d23a52c5ac40a89dad46c7b93e8e4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/layout/LICENSE",
+      "blob": "d3af5460af5e688fdb2bfb24505c06caa97b1159",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/location/LICENSE",
+      "blob": "d3af5460af5e688fdb2bfb24505c06caa97b1159",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/menubar/LICENSE",
+      "blob": "d3af5460af5e688fdb2bfb24505c06caa97b1159",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/messages/LICENSE",
+      "blob": "7d159ffb1292e4107cad4a00a6cb235466733329",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/midi/LICENSE",
+      "blob": "085087865175f321fb6b78cecc10f86cd42384d6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/milight/LICENSE",
+      "blob": "d3af5460af5e688fdb2bfb24505c06caa97b1159",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/mjomatic/LICENSE",
+      "blob": "7b4825824597a97eb52b4b9ebfc00e44478ee145",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/mouse/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/mouse/manymouse/LICENSE.txt",
+      "blob": "102058289ba840ea2738096226b5d8da855a14d2",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/network/ping/LICENSE",
+      "blob": "94aa95e03cf1b94b06b75df2ba95a5ee2c42e24c",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/network/ping/LICENSE.SimplePing",
+      "blob": "e1ec82e7c148b2b83fa244daf5e3a263a0055372",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/noises/LICENSE",
+      "blob": "383e1c521f75d2f57deb7c76c8f252c34b397de1",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/notify/LICENSE",
+      "blob": "95f4a234984da2376a9e06c761df7c64dc2204d4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/osascript/LICENSE",
+      "blob": "3d69cf43847fa7832e928a281bf6d4bf1a2616b0",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/pasteboard/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/pathwatcher/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/razer/LICENSE.md",
+      "blob": "542d3a705256ead3081200ace996616e78355bca",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/screen/LICENSE",
+      "blob": "8ccfc86fbf2d23a52c5ac40a89dad46c7b93e8e4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/settings/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/socket/LICENSE",
+      "blob": "467558cb32613d39f22e67748616505769efefa7",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/sound/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/speech/LICENSE",
+      "blob": "95f4a234984da2376a9e06c761df7c64dc2204d4",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/spotify/LICENSE",
+      "blob": "b19527d45b2c5f1c6b60c8fb75e3c2f3871a918d",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/streamdeck/LICENSE",
+      "blob": "7d0a4f3fc2a698f828dd3d52d74dc6366d139b15",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/tabs/LICENSE",
+      "blob": "c7660743f4c8496610934fa312db15f152cd759d",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/tangent/LICENSE",
+      "blob": "b91f83ca186ce153a0176cca5f9e431f16a3b3da",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/task/LICENSE",
+      "blob": "dd6470beb64a9646394f5e3deb473df1acdb8c4e",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/timer/LICENSE",
+      "blob": "8c33388c403bd8251c1978f4c2daf2fcebb11cb6",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/uielement/LICENSE",
+      "blob": "3a333e741d394f48022c62f13586ef64ce5dd28e",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/urlevent/LICENSE",
+      "blob": "a0bc4873d43633dea0429efbf95073ab80534cc3",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/usb/LICENSE",
+      "blob": "dd6470beb64a9646394f5e3deb473df1acdb8c4e",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/utf8/LICENSE",
+      "blob": "b546026ab511d348c8d35d9fa39e9297315bf998",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/vox/LICENSE",
+      "blob": "b19527d45b2c5f1c6b60c8fb75e3c2f3871a918d",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/wifi/LICENSE",
+      "blob": "04c55e0241a2bbaf848d03193535be324869dbb5",
+      "mode": "100644"
+    },
+    {
+      "path": "extensions/window/LICENSE",
+      "blob": "74a74cf4757216a5778f900cab60809b65969420",
+      "mode": "100644"
+    }
+  ],
+  "podAcknowledgements": [
+    {
+      "path": "Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.markdown",
+      "blob": "f219b23e38a75c0aaeae98dc1cc611ccab3f81ad",
+      "mode": "100644"
+    },
+    {
+      "path": "Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.plist",
+      "blob": "0fd35c385bb06d3f4b8102626a24ac630fecc719",
+      "mode": "100644"
+    }
+  ],
+  "licence": {
+    "path": "LICENSE",
+    "blob": "a1119e08ade00aedc2df850a7e8d53b09cae521c",
+    "mode": "100644"
+  },
+  "retiredSourcePaths": [
+    "Hammerspoon",
+    "Hammerspoon Tests",
+    "Hammerspoon.xcodeproj",
+    "Hammerspoon.xcworkspace",
+    "HammerspoonUITests",
+    "LuaSkin",
+    "Pods",
+    "extensions",
+    "scripts",
+    "Podfile",
+    "Podfile.lock"
+  ],
+  "maintainedEngineFiles": [
+    "engine/upstream.json",
+    "engine/README.md"
+  ],
+  "integration": [
+    {
+      "capability": "Wallpaper tint and colour controls",
+      "ownedSource": [
+        "WallpaperVeil/core/wallpaper_veil.lua"
+      ],
+      "upstreamSource": [
+        "extensions/canvas",
+        "extensions/dialog",
+        "extensions/drawing/color",
+        "extensions/screen"
+      ],
+      "status": "App-owned Lua calls the unchanged bundled native engine; not a native port."
+    },
+    {
+      "capability": "Display brightness synchronisation",
+      "ownedSource": [
+        "WallpaperVeil/core/display_brightness_sync.lua"
+      ],
+      "upstreamSource": [
+        "extensions/screen/libscreen.m",
+        "extensions/timer",
+        "extensions/settings"
+      ],
+      "status": "App-owned synchronisation logic uses unmodified upstream native brightness APIs."
+    },
+    {
+      "capability": "Optional desktop widgets and clock controls",
+      "ownedSource": [
+        "WallpaperVeil/core/desktop_widgets.lua",
+        "WallpaperVeil/core/desktop_widget_clock.lua",
+        "WallpaperVeil/core/desktop_widget_panel.lua"
+      ],
+      "upstreamSource": [
+        "extensions/application",
+        "extensions/axuielement",
+        "extensions/eventtap",
+        "extensions/window",
+        "extensions/task"
+      ],
+      "status": "App-owned behaviour with retained upstream bindings; real platform qualification remains separate."
+    },
+    {
+      "capability": "App identity, About, update UI and login",
+      "ownedSource": [
+        "WallpaperVeil/native/launcher.m",
+        "WallpaperVeil/native/native_ui.m",
+        "WallpaperVeil/native/update_check.h"
+      ],
+      "upstreamSource": [
+        "LuaSkin/lua-5.4.7/src/lua.h",
+        "LuaSkin/lua-5.4.7/src/lauxlib.h"
+      ],
+      "status": "Original Wallpaper Veil native code; the UI bridge uses the bundled Lua C API, not external installed Hammerspoon."
+    }
+  ]
+}

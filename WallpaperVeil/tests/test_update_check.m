@@ -1,5 +1,5 @@
 #import <Foundation/Foundation.h>
-#import "../update_check.h"
+#import "../native/update_check.h"
 
 static NSUInteger assertions = 0;
 static void check(BOOL condition, NSString *label) {

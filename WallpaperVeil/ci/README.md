@@ -1,5 +1,10 @@
 # Wallpaper Veil automation
 
+These are contributor and release-builder instructions. App users download the
+release ZIP, copy `Wallpaper Veil.app` to Applications and open it; they do not
+run these tools or install Python, Xcode, Git or Hammerspoon. See the
+[installation guide](../../README.md).
+
 `Wallpaper Veil checks` runs inexpensive Ubuntu checks on pushes and pull requests.
 Its stable required-check name is **Source checks**. It compiles the Python files
 and parses the application Lua with Lua 5.4; it does not exercise macOS features.
@@ -8,7 +13,8 @@ and parses the application Lua with Lua 5.4; it does not exercise macOS features
 runs only through **Run workflow**. It downloads the official runtime pinned in
 `runtime.json`, checks its SHA-256 and original signature, compiles the native
 launcher and UI bridge, and packages the nested application. It verifies the code
-signatures again after extracting `wallpaper-veil-preview.zip`, then uploads
+signatures and the standalone bundle contract again after extracting
+`wallpaper-veil-preview.zip`, then uploads
 Actions artifacts with a 14-day retention period. It never launches the app or
 exercises hardware. No release is published and no recurring schedule is enabled.
 
@@ -32,6 +38,31 @@ Actions are pinned to the commit IDs behind official release tags, verified on
 When updating an action or runtime, verify the corresponding official metadata
 and update the pin deliberately.
 
+
+## Maintained source and historical engine inputs
+
+Product Lua is maintained under `WallpaperVeil/core/`; the launcher, native UI
+bridge and updater source are under `WallpaperVeil/native/`. The repository no
+longer maintains a second full upstream application, Xcode workspace, Pods tree
+or upstream test suite in its current working tree.
+
+[`engine/upstream.json`](../../engine/upstream.json) records the qualified native
+commit/tag/tree, architectures, bootstrap and exact header/legal Git objects.
+The product builder validates the retained upstream history and materializes only
+those declared headers and legal files into a temporary build directory. It
+rejects undeclared engine overrides or a silently changed policy. Keep full
+history and the pinned `1.1.1` tag available; a shallow product-only checkout is
+not a complete source-build input. No generated upstream input tree is an app
+runtime dependency.
+
+The separate engine builder also validates the maintained checkout, then creates
+a temporary detached worktree at the pinned historical commit. Its Xcode paths
+refer to that historical worktree, never to the maintained product root. The
+native compile recipe and its qualified 95 binaries/81 component notices remain
+unchanged. Source pruning does not mean those native modules were rewritten or
+removed from the shipped engine. See [architecture](../../docs/architecture.md),
+[upstream maintenance](../../docs/upstream-maintenance.md) and the
+[development guide](../../docs/development.md).
 
 ## Source-engine developer builds
 
@@ -90,6 +121,24 @@ do not qualify application startup, menu behavior, real brightness, login,
 permissions or display lifecycle. Repeat local application acceptance and UI
 checks before installation or release. Do not upload a developer's local build
 log; the permanent workflow's retained log comes from its public CI runner.
+
+## Single-copy package checks
+
+`WallpaperVeil/standalone_contract.py` is a build-time, read-only audit. Packaging
+requires one complete top-level `Wallpaper Veil.app` in the ZIP, internal relative
+symlinks, and native dependencies/runpaths that resolve to the app or macOS
+system libraries. It checks each Mach-O architecture and uses the nearest app's
+executable context, including the nested runtime. A Homebrew/developer-path
+library, absolute or escaping symlink, missing bundled library or mismatched
+architecture fails packaging. The extracted app is checked again, with deep
+strict signature verification; the package summary records both audits.
+
+These checks do not launch the app or establish Gatekeeper/notarization,
+permissions, a relocated/fresh-account launch or hardware behavior. The finished
+app contains its executable Lua/native code; writable settings live in
+Application Support. Release JSON/checksum files are verification records, not
+files an app user must install. Keep actual launch/relocation and feature
+qualification distinct from structural package proof.
 
 ## Version and installed release checks
 

@@ -2,17 +2,17 @@
 
 Wallpaper Veil's original code is licensed under the MIT licence, reproduced in [WallpaperVeil/LICENSE](WallpaperVeil/LICENSE). The root [LICENSE](LICENSE) retains the Hammerspoon copyright notice and MIT terms alongside Wallpaper Veil's copyright notice.
 
-## Hammerspoon
+## Hammerspoon and original source
 
-This source copy is based on Hammerspoon 1.1.1, commit `1469832361b4c3687ec7d589c1b4efe4d3b742ee`. The prototype packages the official Hammerspoon 1.1.1 build 6936 native runtime. Hammerspoon is MIT-licensed. Its original licence is preserved verbatim in [LICENSES/Hammerspoon-MIT.txt](LICENSES/Hammerspoon-MIT.txt), and its credits are retained in [CREDITS.md](CREDITS.md).
+The bundled engine is based on Hammerspoon 1.1.1, commit `1469832361b4c3687ec7d589c1b4efe4d3b742ee`, build 6936. Each release's provenance identifies whether its verified engine input was source-built or from the pinned official release. Hammerspoon's original MIT licence is preserved verbatim in [LICENSES/Hammerspoon-MIT.txt](LICENSES/Hammerspoon-MIT.txt), with original credits in [CREDITS.md](CREDITS.md).
 
-Hammerspoon is based on Mjolnir, which is based on Hydra. Hammerspoon's icon is attributed to Juerd Waalboer in its credits. Retain those notices while the corresponding material remains included.
+The duplicated upstream working-tree folders were removed from current main; original code and terms remain in retained tag/history `1.1.1`. This does not remove the bundled engine or its licensing obligations. See the [integration map and update procedure](docs/upstream-maintenance.md).
 
-## Bundled components
+## Bundled component terms
 
-Dependencies retain their own copyright notices and licences. Wallpaper Veil's MIT declaration does not replace those terms. The checked-in component sources retain their original notices; the CocoaPods acknowledgement files include component-specific terms, including MIT, BSD and public-domain notices:
+Dependencies retain their own copyrights and licences. Wallpaper Veil's MIT declaration does not replace those terms. The qualified [input policy](engine/upstream.json) lists all 81 component notices and the two CocoaPods acknowledgement files by original path and Git object. The builder recovers the exact pinned bytes into temporary staging and preserves their original relative paths in the app's acknowledgements.
 
-- [Third-party licence text](<Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.markdown>)
-- [Machine-readable acknowledgements](<Pods/Target Support Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.plist>)
+- [Pinned third-party licence text](https://github.com/Hammerspoon/hammerspoon/blob/1469832361b4c3687ec7d589c1b4efe4d3b742ee/Pods/Target%20Support%20Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.markdown)
+- [Pinned machine-readable acknowledgements](https://github.com/Hammerspoon/hammerspoon/blob/1469832361b4c3687ec7d589c1b4efe4d3b742ee/Pods/Target%20Support%20Files/Pods-Hammerspoon/Pods-Hammerspoon-acknowledgements.plist)
 
-The builder copies the project licence, Wallpaper Veil's MIT licence, the original Hammerspoon MIT licence, this notice, upstream credits and dependency acknowledgements into the nested runtime's `Contents/Resources/Acknowledgements`. It also copies component licence/notice files from extension and vendor sources, plus the Lua 5.4.7 licence documentation, under `Acknowledgements/Components`, preserving source-relative paths and a build manifest. Preserve these files and relevant component notices in redistributed source and app bundles. Review notices again when changing or removing dependencies.
+The builder retains project MIT, original Hammerspoon MIT, credits, this notice, component documents and Lua 5.4.7 licence documentation under the nested runtime's `Contents/Resources/Acknowledgements`. Qualified source-built inputs also retain their source-engine notice inventory. Preserve these documents in redistributed bundles and review them when changing/removing dependencies. The source remains available at its pinned historical identity.

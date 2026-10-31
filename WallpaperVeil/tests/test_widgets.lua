@@ -1,6 +1,6 @@
 -- Run from the repository root: lua5.4 WallpaperVeil/tests/test_widgets.lua
 -- These tests use in-memory hs stubs. They do not inspect UI or change preferences.
-local source=arg[1] or 'WallpaperVeil/app/desktop_widgets.lua'
+local source=arg[1] or 'WallpaperVeil/core/desktop_widgets.lua'
 local count=0
 local function equal(actual,expected,message)
     count=count+1

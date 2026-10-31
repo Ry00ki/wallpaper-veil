@@ -10,10 +10,15 @@ import platform
 import plistlib
 import shutil
 import subprocess
+import sys
 import tempfile
 
 
-def verify(app: Path) -> None:
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from standalone_contract import audit_bundle, validate_archive
+
+
+def verify(app: Path) -> dict:
     helper = app / 'Contents/Helpers/Wallpaper Veil Runtime.app'
     expected = [(app, 'com.ry00ki.wallpaperveil.launcher', 'WallpaperVeil'),
                 (helper, 'com.ry00ki.wallpaperveil', 'WallpaperVeilRuntime')]
@@ -23,7 +28,9 @@ def verify(app: Path) -> None:
             raise RuntimeError('Unexpected Wallpaper Veil bundle layout or executable identity')
         if not (bundle / 'Contents/MacOS' / executable).is_file():
             raise RuntimeError('A declared native executable is missing')
+    standalone = audit_bundle(app)
     subprocess.run(['/usr/bin/codesign', '--verify', '--deep', '--strict', '--verbose=2', str(app)], check=True)
+    return standalone
 
 
 def read_build_report(app: Path) -> dict:
@@ -70,17 +77,18 @@ def package(app: Path, destination: Path) -> Path:
     if destination == app or destination.is_relative_to(app):
         raise RuntimeError('Artifact output must remain outside the signed app bundle')
     destination.mkdir(parents=True, exist_ok=True)
-    verify(app)
+    bundle_contract = verify(app)
     report = read_build_report(app)
     archive = destination / 'wallpaper-veil-preview.zip'
     if archive.exists():
         raise RuntimeError('Choose an artifact directory without an existing preview ZIP')
     subprocess.run(['/usr/bin/ditto', '-c', '-k', '--norsrc', '--noextattr', '--keepParent',
                     str(app), str(archive)], check=True)
+    archive_contract = validate_archive(archive)
     with tempfile.TemporaryDirectory(prefix='wallpaper-veil-extraction-', suffix='.noindex') as temporary:
         extracted = Path(temporary)
         subprocess.run(['/usr/bin/ditto', '--noqtn', '-x', '-k', str(archive), str(extracted)], check=True)
-        verify(extracted / app.name)
+        extracted_contract = verify(extracted / app.name)
     digest = hashlib.sha256(archive.read_bytes()).hexdigest()
     archive.with_suffix('.zip.sha256').write_text(f'{digest}  {archive.name}\n')
     shutil.copy2(app.with_suffix('.build.json'), destination / 'wallpaper-veil-build.json')
@@ -95,6 +103,8 @@ def package(app: Path, destination: Path) -> Path:
         'version': report['version'], 'build': report['build'],
         'release_tag': report['release_tag'], 'release_channel': report['release_channel'],
         'extracted_signatures_verified': True, 'app_launched': False,
+        'standalone_contract': {'bundle': bundle_contract, 'archive': archive_contract,
+                                'extracted_bundle': extracted_contract},
         'runtime_origin': runtime['origin'],
         'engine_recompiled_from_source': report['engine_recompiled_from_source'],
         'launcher_recompiled_from_source': report['launcher_recompiled_from_source'],

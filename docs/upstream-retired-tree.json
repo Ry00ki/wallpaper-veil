@@ -1,0 +1,176 @@
+{
+  "schema": 1,
+  "scope": "Removed from active checkout, retained in Git history; not a claim of native runtime removal.",
+  "nativeBaseline": "1469832361b4c3687ec7d589c1b4efe4d3b742ee",
+  "previousProductHead": "aa4d8c7b65856d533b9b5fafdeb5d1ad78504b4a",
+  "paths": [
+    {
+      "formerPath": ".fauxpas",
+      "formerObject": "7c13dce4c57e5ed09207fec52b23f72bca592c45",
+      "files": 1,
+      "bytes": 36837,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": ".flake8rc",
+      "formerObject": "e44b81084185c2f2d2a5f93214c2749e3f95a172",
+      "files": 1,
+      "bytes": 23,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": ".luacheckrc",
+      "formerObject": "4ad3b2df2538ebe35a99fcc48b73dd462380c93e",
+      "files": 1,
+      "bytes": 1067,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": ".stickler.yml",
+      "formerObject": "950124b8233563fa637a0624e54a367068f9b16e",
+      "files": 1,
+      "bytes": 129,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": ".syntastic_objc_config",
+      "formerObject": "1becb38586a8b979eff4d3ef93f293298720bc7d",
+      "files": 1,
+      "bytes": 42,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Brewfile",
+      "formerObject": "c8391af18724c68599ce83eb1432f7fbd4115063",
+      "files": 1,
+      "bytes": 170,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Hammerspoon",
+      "formerObject": "dfe1213892916fb6739353a7e424d141f17cd501",
+      "files": 71,
+      "bytes": 1065877,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Hammerspoon Tests",
+      "formerObject": "056cfc94f3d4297217d477cc02b2eb92b475aaa9",
+      "files": 32,
+      "bytes": 47022,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Hammerspoon.xcodeproj",
+      "formerObject": "9b8517fe3a6d444dd7f0b38a5d73d7ddaf086fd7",
+      "files": 2,
+      "bytes": 589989,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Hammerspoon.xcworkspace",
+      "formerObject": "377955eaabd179ecb2a58938805ff026279db430",
+      "files": 7,
+      "bytes": 15191,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "HammerspoonUITests",
+      "formerObject": "ceabe9c1abef6fa3d05b7fa85f67a756c3700705",
+      "files": 3,
+      "bytes": 4300,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "LuaSkin",
+      "formerObject": "f95e8192314812841b4f68b8daad7e06e2bdd701",
+      "files": 94,
+      "bytes": 1634410,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Podfile",
+      "formerObject": "b6442e812db234b76684b5e95d76623de05b1b01",
+      "files": 1,
+      "bytes": 1589,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Podfile.lock",
+      "formerObject": "2ecaf1452586408445441f3f32e37b76757bdf2f",
+      "files": 1,
+      "bytes": 2150,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "Pods",
+      "formerObject": "87b6eb13f254c59a81ae5eaee62d99a2deb66c67",
+      "files": 1930,
+      "bytes": 15715070,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "SPOONS.md",
+      "formerObject": "1cafd9375bb6de01a376dec2842c50c94474a4ae",
+      "files": 1,
+      "bytes": 11373,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "UPSTREAM_CONTRIBUTING.md",
+      "formerObject": "337cd89c8f16ac5e521c8cd9f2b38c873bccc05e",
+      "files": 1,
+      "bytes": 13415,
+      "source": "aa4d8c7b65856d533b9b5fafdeb5d1ad78504b4a"
+    },
+    {
+      "formerPath": "UPSTREAM_README.md",
+      "formerObject": "587d14529190214b1e6b22b8ce61b9962231fbc5",
+      "files": 1,
+      "bytes": 2917,
+      "source": "aa4d8c7b65856d533b9b5fafdeb5d1ad78504b4a"
+    },
+    {
+      "formerPath": "appcast.xml",
+      "formerObject": "50e6cfc98d4d1a23528e9f20040d87030609a8ea",
+      "files": 1,
+      "bytes": 65369,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "codecov.yml",
+      "formerObject": "71be8a92b860040721d6228b38406bd6f3c29abb",
+      "files": 1,
+      "bytes": 147,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "extensions",
+      "formerObject": "20fa223410a75c85fcd43454d68300eaa3b6e980",
+      "files": 419,
+      "bytes": 6104739,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "requirements.txt",
+      "formerObject": "3be724aa19334eee563d22a0daa51d3d6abe05e5",
+      "files": 1,
+      "bytes": 52,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "scripts",
+      "formerObject": "1527d95020f60c0865efae7bc5ccb46831da7ce5",
+      "files": 24,
+      "bytes": 26834231,
+      "source": "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
+    },
+    {
+      "formerPath": "WallpaperVeil/upstream-workflows",
+      "formerObject": "ba2ba9870d8ec07b759e9bdd188bedb9d902ae98",
+      "files": 7,
+      "bytes": 14688,
+      "source": "aa4d8c7b65856d533b9b5fafdeb5d1ad78504b4a"
+    }
+  ]
+}

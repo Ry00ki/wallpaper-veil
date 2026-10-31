@@ -12,14 +12,14 @@ Fork the repository, create a branch from `main`, make a scoped change, and open
 
 ## Getting started
 
-Read the [README](README.md) for the current architecture and local build recipe. The repository retains Hammerspoon source history. The product builder compiles the Wallpaper Veil launcher and native UI module, and accepts the pinned official engine or a source-engine archive verified against its manifest and native baseline. Record the chosen origin; a launcher-only change does not rebuild the engine.
+Read the [README](README.md) for user installation and [development guide](docs/development.md) for architecture and the local build recipe. The repository retains Hammerspoon source history. The product builder compiles the Wallpaper Veil launcher and native UI module, and accepts the pinned official engine or a source-engine archive verified against its manifest and native baseline. Record the chosen origin; a launcher-only change does not rebuild the engine.
 
 Useful areas:
 
-- `WallpaperVeil/native_ui.m`: app-owned About, menus and scoped engine-window suppression.
-- `WallpaperVeil/launcher.m`: native app startup and state-directory handling.
+- `WallpaperVeil/native/native_ui.m`: app-owned About, menus and scoped engine-window suppression.
+- `WallpaperVeil/native/launcher.m`: native app startup and state-directory handling.
 - `WallpaperVeil/build_local.py`: packaging, identity and local signing.
-- `WallpaperVeil/app/`: application startup, menus and features.
+- `WallpaperVeil/core/`: application startup, menus and features.
 - `WallpaperVeil/handoff.py`: setup-specific acceptance and recovery tooling.
 
 The handoff helper has fixed local path assumptions. Check them before running it. Do not commit a contributor's absolute home paths, preferences or diagnostic outputs.
@@ -28,7 +28,7 @@ The handoff helper has fixed local path assumptions. Check them before running i
 
 Explain the problem, keep the diff scoped and preserve unrelated Hammerspoon behavior. Keep executable runtime dependencies in the finished bundle rather than relying on the source checkout or a user's Hammerspoon configuration.
 
-Preserve the original runtime input and user settings while developing. Do not add permission prompts, login registration, telemetry or update services as incidental changes to another feature.
+Before changing upstream code, use the [integration map and update procedure](docs/upstream-maintenance.md); retained engine code, app-owned code and build-time adaptations have different owners. Preserve the original runtime input and user settings while developing. Do not add permission prompts, login registration, telemetry or update services as incidental changes to another feature.
 
 Test every new or changed feature and run the existing regression suites for every release. Verify the published download and perform an installed-app smoke check after publication. Keep evidence of the exact source, artifact hash and checks performed.
 

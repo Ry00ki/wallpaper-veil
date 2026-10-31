@@ -20,12 +20,18 @@ import subprocess
 import sys
 import tempfile
 
-ENGINE_COMMIT = "1469832361b4c3687ec7d589c1b4efe4d3b742ee"
-ENGINE_TAG = "1.1.1"
-ENGINE_BUILD = "6936"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from upstream import load_policy, validate_checkout, policy_identity
+
+POLICY = load_policy()
+ENGINE_COMMIT = POLICY["upstream"]["commit"]
+ENGINE_TAG = POLICY["upstream"]["tag"]
+ENGINE_BUILD = POLICY["upstream"]["build"]
 BASELINE_WORKFLOW_COMMIT = "872baf51a351dda0f3b4e9c9daffedbac69889b9"
-UPSTREAM_URL = "https://github.com/Hammerspoon/hammerspoon.git"
-ARCHITECTURES = {"arm64", "x86_64"}
+UPSTREAM_URL = POLICY["upstream"]["repository"]
+ARCHITECTURES = set(POLICY["qualification"]["architectures"])
+NATIVE_BINARY_COUNT = POLICY["qualification"]["nativeBinaryCount"]
+COMPONENT_NOTICE_COUNT = POLICY["qualification"]["componentNoticeCount"]
 MACHO_MAGIC = {bytes.fromhex(value) for value in (
     "feedface", "cefaedfe", "feedfacf", "cffaedfe",
     "cafebabe", "bebafeca", "cafebabf", "bfbafeca",
@@ -110,7 +116,7 @@ def bundle_legal_notices(source: Path, resources: Path) -> list[dict]:
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 shutil.copy2(path, destination)
                 legal_files.append({"path": relative.as_posix(), "sha256": sha256(path)})
-    require(len(legal_files) == 81, "The audited set of 81 component notices changed")
+    require(len(legal_files) == COMPONENT_NOTICE_COUNT, "The qualified component legal-notice inventory changed")
     return sorted(legal_files, key=lambda value: value["path"])
 
 
@@ -145,7 +151,7 @@ def validate_and_sign(app: Path, source: Path) -> tuple[dict, list[Path]]:
         require((frameworks / "hs" / name).is_file(), f"Missing engine module: {name}")
     require((frameworks / "LuaSkin.framework/LuaSkin").is_file(), "LuaSkin is missing")
     binaries = macho_files(app)
-    require(len(binaries) == 95, "The audited set of 95 native binaries changed")
+    require(len(binaries) == NATIVE_BINARY_COUNT, "The qualified native binary inventory changed")
     for path in sorted(binaries, key=lambda value: -len(value.parts)):
         dependencies = run("/usr/bin/otool", "-L", path)
         require(not any(name in dependencies for name in
@@ -191,6 +197,7 @@ def package_engine(source: Path, derived: Path, output: Path, project: Path) -> 
         "compatibilitySettings": {"CLANG_WARN_QUOTED_INCLUDE_IN_FRAMEWORK_HEADER": "NO",
                                   "GCC_TREAT_WARNINGS_AS_ERRORS": "NO"},
         "upstreamCommit": ENGINE_COMMIT, "upstreamTag": ENGINE_TAG,
+        "upstreamPolicy": policy_identity(POLICY),
         "nativeCodeHead": run("/usr/bin/git", "-C", source, "rev-parse", "HEAD"),
         "sourceTree": "pinned-upstream-baseline", "workflowCommit": workflow_commit,
         "workflow": {"repository": os.getenv("GITHUB_REPOSITORY"), "commit": workflow_commit,
@@ -226,6 +233,7 @@ def build(project: Path, destination: Path, jobs: int = 3) -> dict:
             "Source and build output must remain outside Documents")
     require(not destination.exists() or not any(destination.iterdir()),
             "Choose an empty source-engine artifact directory")
+    validate_checkout(project)
     destination.mkdir(parents=True, exist_ok=True)
     run("/usr/bin/git", "-C", project, "fetch", "--no-tags", UPSTREAM_URL,
         f"refs/tags/{ENGINE_TAG}:refs/tags/{ENGINE_TAG}")
