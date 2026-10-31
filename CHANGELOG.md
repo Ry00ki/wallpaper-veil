@@ -2,7 +2,7 @@
 
 Changes are grouped by release. Stable releases and previews are listed separately below.
 
-## 1.0.0 preview - 31.10.26
+## 1.0.0 - 31.10.26
 
 - Check GitHub automatically when About opens; display independent stable and preview release choices.
 - Add native Download & Install with exact release-asset/build-receipt verification, safe extraction, atomic replacement, passive startup confirmation and rollback/recovery.

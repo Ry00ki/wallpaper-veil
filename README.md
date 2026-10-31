@@ -1,7 +1,7 @@
 # Wallpaper Veil
 
 [![Source checks](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml/badge.svg)](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml)
-![Release](https://img.shields.io/badge/release-1.0%20candidate-orange)
+![Release](https://img.shields.io/badge/release-1.0-blue)
 
 Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
 
@@ -13,7 +13,7 @@ Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint ab
 
 Wallpaper Veil is distributed as **one self-contained `Wallpaper Veil.app`** for macOS 13 or later, on Apple Silicon and Intel Macs.
 
-1. Download **`wallpaper-veil.zip`** from [Releases](https://github.com/Ry00ki/wallpaper-veil/releases) when the stable release is published. Interim preview builds use `wallpaper-veil-preview.zip` and are listed separately in [Releases](https://github.com/Ry00ki/wallpaper-veil/releases).
+1. Download **`wallpaper-veil.zip`** from the [latest stable release](https://github.com/Ry00ki/wallpaper-veil/releases/latest). Preview builds use `wallpaper-veil-preview.zip` and are listed separately in [Releases](https://github.com/Ry00ki/wallpaper-veil/releases).
 2. Expand the ZIP and drag **`Wallpaper Veil.app` into Applications**. Your personal `~/Applications` folder is also supported. Keep one installed copy.
 3. Open the app and use **◐ Veil** in the menu bar.
 
@@ -63,7 +63,7 @@ Look for **◐ Veil** in the menu bar; **○ Veil** indicates that the wallpaper
 
 About Wallpaper Veil includes the repository and third-party notices, and checks GitHub automatically when it opens. Separate **Stable release** and **Preview** choices show the newest version in each channel; **Download & Install** verifies the download, replaces the app and restarts it. Stable is the recommended choice. Downloads and installation start only when you choose them.
 
-The 1.0 release candidate is tested on macOS 27.2 with Apple silicon and two native-brightness-capable Apple displays. Bundles target macOS 13+ and contain Apple silicon/Intel executables; other hardware/OS combinations are not yet covered by a supported-hardware matrix. Tint, brightness following, default widget mode and the update flow have release checks. Optional clock/Notification Center automation and actual sleep/Spaces/physical display-reconnect qualification remain open in [#3](https://github.com/Ry00ki/wallpaper-veil/issues/3) and [#4](https://github.com/Ry00ki/wallpaper-veil/issues/4). Launch at login was verified after reboot on macOS 27.0.1. Hardware brightness changes may be unsupported or fail; the app confirms them by read-back.
+The 1.0 release is tested on macOS 27.2 with Apple silicon and two native-brightness-capable Apple displays. Bundles target macOS 13+ and contain Apple silicon/Intel executables; other hardware/OS combinations are not yet covered by a supported-hardware matrix. Tint, brightness following, default widget mode and the update flow have release checks. Optional clock/Notification Center automation and actual sleep/Spaces/physical display-reconnect qualification remain open in [#3](https://github.com/Ry00ki/wallpaper-veil/issues/3) and [#4](https://github.com/Ry00ki/wallpaper-veil/issues/4). Launch at login was verified after reboot on macOS 27.0.1. Hardware brightness changes may be unsupported or fail; the app confirms them by read-back.
 
 ## Updating
 
