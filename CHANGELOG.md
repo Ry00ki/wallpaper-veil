@@ -2,6 +2,12 @@
 
 Changes are grouped by release. This project has not published a stable release.
 
+## 0.1.6 preview - 31.10.26
+
+- Add **Use macOS defaults** to Desktop widgets: stop the app's widget/clock automation, clear its three choices and reset the one app-managed widget-visibility override to the macOS built-in default.
+- Use an app-owned native preferences bridge for widget visibility, replacing asynchronous command-line writes; resets verify the override was removed.
+- Keep fresh startup free of widget-preference writes and make re-enabling a custom automation or Show/Hide an explicit choice.
+
 ## 0.1.5 preview - 30.10.26
 
 - Separate Startup and Desktop widget controls in App settings, with explicit destinations in System Settings.

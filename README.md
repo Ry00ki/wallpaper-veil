@@ -38,6 +38,8 @@ Brightness sync requires native macOS brightness control. Third-party monitor su
 
 Look for **◐ Veil** in the menu bar; **○ Veil** indicates that the wallpaper tint is off. Open the menu for tint settings, display sync, optional desktop-widget and clock/Notification Center controls, and App settings. Quit and About Wallpaper Veil are available there too.
 
+**Desktop widgets → Use macOS defaults** stops Wallpaper Veil's widget/clock automation and resets its widget-visibility preference to the macOS built-in default. It clears the three automation choices. Select a clock/Notification Center option, or Show now/Hide now, to opt back into custom behaviour; compatible automation choices can be combined.
+
 ![Illustration of the Wallpaper Veil menu-bar item beside the battery and clock](docs/images/menu-bar.png)
 
 <details>

@@ -527,14 +527,14 @@ function M.stop()
     if M.menu then M.menu:delete(); M.menu = nil end
 end
 
-function M.start()
+function M.start(widgetPreferences)
     if M.running then return M end
     M.running = true
     M.generation = M.generation + 1
     local token = M.generation
     local ok, failure = xpcall(function()
         M.widgets = require("desktop_widgets")
-        M.widgets.start()
+        M.widgets.start(widgetPreferences)
         M.enabled = hs.settings.get(prefix .. "enabled") ~= false
         local savedOpacity = hs.settings.get(prefix .. "opacity")
         M.opacity = type(savedOpacity) == "number" and savedOpacity >= 0.10

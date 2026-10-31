@@ -346,8 +346,8 @@ def build(output: Path, runtime: Path, own: Path, source_manifest: Path | None =
                               "native_ui.m": sha256(own / "native_ui.m"), "WallpaperVeil.icns": sha256(icon),
                               "runtime_provenance.py": sha256(own / "runtime_provenance.py"),
                               "version.json": sha256(own / "version.json"),
-                              **({"update_check.h": sha256(own / "update_check.h")}
-                                 if (own / "update_check.h").is_file() else {})},
+                              **{name: sha256(own / name) for name in ("update_check.h", "widget_preferences.h")
+                                 if (own / name).is_file()}},
             "component_notices": component_notices,
             "bundled_lua_hashes": code_hashes,
             "bundled_setup_sha256": sha256(resources / "setup.lua"),

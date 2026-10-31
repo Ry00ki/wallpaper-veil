@@ -134,9 +134,11 @@ local function updatePermission()
     end
     if tapEnabled() then return end
     stopTap()
+    local token = generation
     local created, newTap = pcall(hs.eventtap.new,
         {hs.eventtap.event.types.leftMouseDown, hs.eventtap.event.types.leftMouseUp},
         function(event)
+            if not running or token ~= generation then return false end
             -- Errors must never consume or modify the user's mouse event.
             local succeeded = pcall(observe, event)
             if not succeeded then
@@ -157,7 +159,10 @@ function M.start(callback)
     running, onClick, lastError = true, callback, nil
     generation = generation + 1
     updatePermission()
-    permissionTimer = hs.timer.doEvery(3, updatePermission)
+    local token = generation
+    permissionTimer = hs.timer.doEvery(3, function()
+        if running and token == generation then updatePermission() end
+    end)
     return M
 end
 
