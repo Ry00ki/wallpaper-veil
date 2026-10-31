@@ -71,7 +71,8 @@ local ok, failure = xpcall(function()
     end
     wallpaperVeil = require("wallpaper_veil")
     wallpaperVeil.loginItemStatus = nativeUI.loginStatus
-    wallpaperVeil.start()
+    wallpaperVeil.start({read=nativeUI.widgetPreferenceRead, write=nativeUI.widgetPreferenceWrite,
+        reset=nativeUI.resetWidgetDefaults})
     displayBrightnessSync = require("display_brightness_sync")
     displayBrightnessSync.start(wallpaperVeil)
     local appSettings = require("app_settings")
@@ -110,6 +111,7 @@ local ok, failure = xpcall(function()
         probe.releaseTag = probe.nativeUI.currentReleaseTag
         probe.releaseChannel = probe.nativeUI.releaseChannel
         probe.loginItem = nativeUI.loginStatus()
+        probe.desktopWidgets = wallpaperVeil.widgets.status()
         probe.prototype = "Bundled upstream native runtime with app-owned launcher and Lua"
         writeReport(probe)
     end
@@ -233,7 +235,8 @@ local ok, failure = xpcall(function()
                 require("acceptance").run(function(result)
                     writeReport(result, support .. "/acceptance.json")
                     pcall(diagnostic)
-                end)
+                end, {widgetPreferences={read=nativeUI.widgetPreferenceRead,
+                    write=nativeUI.widgetPreferenceWrite, restore=nativeUI.widgetPreferenceRestoreForTest}})
             end, debug.traceback)
             if not passed then
                 writeReport({ok=false,error=err}, support .. "/acceptance.json")
