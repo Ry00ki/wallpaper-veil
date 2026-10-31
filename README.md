@@ -5,16 +5,49 @@
 
 Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
 
-Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Contributions, bug reports and feature requests are welcome. The product builder compiles Wallpaper Veil's launcher and native UI bridge, and accepts either the pinned official engine or a verified engine compiled from the audited source baseline. The manual source-engine build and product packaging retain separate provenance.
+<p align="center">
+  <img src="docs/images/wallpaper-veil-cover.jpg" alt="The same mountain photograph without a veil on the left and with a 50% black veil on the right, alongside the Wallpaper Veil app icon" width="840">
+</p>
+
+[Download the preview](#download-and-update) · [Report a bug](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=bug_report.yml) · [Portfolio overview](https://www.vincent-ry00ki.com/wallpaper-veil)
+
+*Visuals reuse the portfolio’s photographs and simplified interface illustrations. They explain the features; they are not live application screenshots.*
 
 ## Features and status
 
-- Adjust tint colour and strength, with saved custom colours.
-- Keep normal wallpaper rotation and desktop interaction.
-- Select a source and follower for hardware-brightness sync.
-- Use optional desktop-widget and clock/Notification Center controls.
-- Access Quit and About Wallpaper Veil from the app's menu.
-- Check the installed version against GitHub releases and open a newer release for manual updating.
+### Keep your wallpaper, choose its strength
+
+Adjust tint colour and strength, save custom colours, and switch the veil on or off. The original photo stays in place and normal wallpaper rotation continues. Desktop icons and windows remain above the veil.
+
+<details>
+<summary>See colour and strength examples</summary>
+
+![The same photograph with the veil off, a 20% black veil, a 50% black veil and a 30% warm custom-colour veil](docs/images/colour-and-strength.png)
+
+</details>
+
+### One adjustment, two displays
+
+Choose a source display and a follower for hardware-brightness sync. When the source brightness changes, the paired display follows. This is separate from the wallpaper tint and strength controls.
+
+![Two illustrated displays showing matching sun icons and 50% brightness: adjust the primary display and the paired display follows automatically](docs/images/brightness-sync.png)
+
+Brightness sync requires native macOS brightness control. Third-party monitor support is not guaranteed; the preview does not yet have a supported-hardware matrix.
+
+### Quietly in the menu bar
+
+Look for **◐ Veil** in the menu bar; **○ Veil** indicates that the wallpaper tint is off. Open the menu for tint settings, display sync, optional desktop-widget and clock/Notification Center controls, and App settings. Quit and About Wallpaper Veil are available there too.
+
+![Illustration of the Wallpaper Veil menu-bar item beside the battery and clock](docs/images/menu-bar.png)
+
+<details>
+<summary>See the simplified app menu</summary>
+
+![Simplified Wallpaper Veil menu with tint, brightness sync, colour, strength, desktop widgets, app settings, Quit and About controls](docs/images/menu-controls.png)
+
+</details>
+
+About Wallpaper Veil includes the repository and third-party notices, plus **Check for Updates** to compare the installed version with GitHub releases and open a newer release for manual updating.
 
 The preview is for evaluation and development. Hardware-brightness changes can fail or be unsupported, and widget automation depends on macOS behavior and permissions. A local two-display test passed brightness synchronization, independent adjustment and restoration. Actual launch at login was verified after reboot on macOS 27.0.1. Sleep/wake and compatibility across different systems remain ongoing acceptance work. There is no published stable release or supported-hardware matrix yet.
 
@@ -27,6 +60,8 @@ About Wallpaper Veil shows the version, build and release channel. **Check for U
 For release notifications, choose **Watch → Custom → Releases** on GitHub. See [GitHub notification settings](https://docs.github.com/en/subscriptions-and-notifications/get-started/configuring-notifications).
 
 ## How it runs
+
+Wallpaper Veil is an experimental public preview based on Hammerspoon 1.1.1. Contributions, bug reports and feature requests are welcome. The product builder compiles Wallpaper Veil's launcher and native UI bridge, and accepts either the pinned official engine or a verified engine compiled from the audited source baseline. The manual source-engine build and product packaging retain separate provenance.
 
 The app has a small Objective-C launcher, an app-owned Cocoa UI module and a nested native runtime app. The UI module provides the About window, repository/notices buttons and native app menu, and keeps inherited engine preferences/console windows outside normal product use. The launcher uses NSWorkspace to start that runtime with controlled app-code and state paths, then exits. It is not a permanent background supervisor.
 
