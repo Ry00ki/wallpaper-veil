@@ -22,7 +22,7 @@ local function scenario(mode)
       updateInProgress=live and mode=='deadline' and cancelled==0}
   end
   local autoChecks, installs=0,0
-  local native={testInstallUpdate=function(channel)assert(channel=="stable");installs=installs+1;return true end,testAutomaticAboutCheck=function()autoChecks=autoChecks+1;return true end,openAccessibilitySettings=function() return true end,showAbout=function() end,closeAbout=function() closed=closed+1 end,
+  local native={testStartupCheckOnce=function()return true end,testInstallUpdate=function(channel)assert(channel=="stable");installs=installs+1;return true end,testAutomaticAboutCheck=function()autoChecks=autoChecks+1;return true end,openAccessibilitySettings=function() return true end,showAbout=function() end,closeAbout=function() closed=closed+1 end,
     diagnostics=diagnostic,cancelUpdateCheck=function() cancelled=cancelled+1 end,
     checkForUpdates=function() live=true end,
     saveAboutPreview=function()

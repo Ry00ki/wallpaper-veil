@@ -139,6 +139,9 @@ local ok, failure = xpcall(function()
         local success, err = pcall(diagnostic)
         if not success then writeReport({ok=false,error=tostring(err),process=process()}) end
     end)
+    if os.getenv("WV_UI_TEST") ~= "1" and os.getenv("WV_SELF_TEST") ~= "1" then
+        after(1, function() if nativeUI.checkOnStartup then nativeUI.checkOnStartup() end end)
+    end
     if os.getenv("WV_UI_TEST") == "1" then
         local function failUITest(problem, path, kind)
             -- Receipt writing and native diagnostics can fail independently.
@@ -183,6 +186,7 @@ local ok, failure = xpcall(function()
                         local newer = string.format("v%d.0.0", tonumber(major)+1)
                         local checks = {}
                         checks.automaticAbout = nativeUI.testAutomaticAboutCheck() == true
+                        checks.startupOnce = nativeUI.testStartupCheckOnce() == true
                         local current = nativeUI.testUpdateResponse(hs.json.encode({release(ui.currentReleaseTag)}))
                         checks.current = current.updateState == "current" and current.latestTag == ui.currentReleaseTag
                         local available = nativeUI.testUpdateResponse(hs.json.encode({release(newer)}))

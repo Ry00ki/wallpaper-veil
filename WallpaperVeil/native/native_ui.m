@@ -8,6 +8,7 @@
 #import "widget_preferences.h"
 #import "update_download.h"
 #import "update_package.h"
+#import "update_notifications.h"
 
 // App-owned UI only. Never alter NSWindowController or another application's UI.
 static NSString * const WVName = @"Wallpaper Veil";
@@ -37,6 +38,16 @@ static NSString *WVUpdateAcknowledgedNonce;
 @property(nonatomic, strong) WVUpdateDownloader *downloader;
 @property(nonatomic, copy) NSString *installPhase;
 @property(nonatomic) BOOL testingAutoCheck;
+@property(nonatomic) BOOL startupCheckInitiated;
+@property(nonatomic) BOOL checkingForStartup;
+@property(nonatomic) BOOL presentingStartupNotice;
+@property(nonatomic, copy) NSString *startupNoticeTag;
+@property(nonatomic, strong) NSButton *skipVersionButton;
+@property(nonatomic, strong) NSButton *startupCheckButton;
+- (NSDictionary *)notificationCandidateIgnoringSkips:(BOOL)ignore;
+- (void)checkOnStartup;
+- (void)skipVersion:(id)sender;
+- (void)startupOptionChanged:(id)sender;
 @property(nonatomic) NSUInteger installGeneration;
 @property(nonatomic, strong) NSTask *installer;
 @property(nonatomic, strong) NSTimer *installerPoll;
@@ -102,7 +113,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     detail.maximumNumberOfLines=2;detail.textColor=NSColor.secondaryLabelColor;[content addSubview:detail];
     self.updateButton=[NSButton buttonWithTitle:@"Check Again" target:self action:@selector(checkForUpdates:)];
     self.updateButton.frame=NSMakeRect(195,367,170,30);self.updateButton.bezelStyle=NSBezelStyleRounded;[content addSubview:self.updateButton];
-    self.updateProgress=[[NSProgressIndicator alloc] initWithFrame:NSMakeRect(375,374,16,16)];
+    self.updateProgress=[[NSProgressIndicator alloc] initWithFrame:NSMakeRect(172,374,16,16)];
     self.updateProgress.style=NSProgressIndicatorStyleSpinning;self.updateProgress.displayedWhenStopped=NO;[content addSubview:self.updateProgress];
     self.updateLabel=WVLabel(@"Checking GitHub releases…",NSMakeRect(20,322,520,38),12,NSFontWeightRegular);
     self.updateLabel.maximumNumberOfLines=2;self.updateLabel.cell.wraps=YES;self.updateLabel.cell.scrollable=NO;self.updateLabel.textColor=NSColor.secondaryLabelColor;[content addSubview:self.updateLabel];
@@ -118,6 +129,10 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     repository.frame=NSMakeRect(275,92,250,30);repository.bezelStyle=NSBezelStyleRounded;[content addSubview:repository];
     NSButton *notices=[NSButton buttonWithTitle:@"Third-Party Notices" target:self action:@selector(openNotices:)];notices.frame=NSMakeRect(170,48,220,30);notices.bezelStyle=NSBezelStyleRounded;[content addSubview:notices];
     NSTextField *footer=WVLabel(@"Checks on opening. Download & Install restarts the app and keeps your settings.",NSMakeRect(15,14,530,20),10.5,NSFontWeightRegular);footer.textColor=NSColor.secondaryLabelColor;[content addSubview:footer];
+    self.skipVersionButton=[NSButton buttonWithTitle:@"Skip This Version" target:self action:@selector(skipVersion:)];
+    self.skipVersionButton.frame=NSMakeRect(370,367,175,30);self.skipVersionButton.bezelStyle=NSBezelStyleRounded;self.skipVersionButton.hidden=YES;[content addSubview:self.skipVersionButton];
+    self.startupCheckButton=[NSButton checkboxWithTitle:@"Check for updates at startup" target:self action:@selector(startupOptionChanged:)];
+    self.startupCheckButton.frame=NSMakeRect(145,124,280,18);self.startupCheckButton.state=WVStartupChecksEnabled(NSUserDefaults.standardUserDefaults)?NSControlStateValueOn:NSControlStateValueOff;[content addSubview:self.startupCheckButton];
     self.updateResult=@{@"state":@"idle"};self.aboutWindow=window;
 }
 - (void)renderCatalog {
@@ -133,6 +148,38 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
             ([row[@"state"] isEqual:@"current"]?@"Installed":([row[@"state"] isEqual:@"ahead"]?@"Installed version is newer":(tag.length?@"Download unavailable":@"Not published yet")));
         button.enabled=!busy&&[row[@"canInstall"] boolValue];
     }
+    NSDictionary *candidate=[self notificationCandidateIgnoringSkips:YES];NSString *tag=candidate[@"tag"];
+    BOOL skipped=tag&&[WVSkippedUpdateTags(NSUserDefaults.standardUserDefaults) containsObject:tag];
+    self.skipVersionButton.hidden=!tag.length;self.skipVersionButton.enabled=!busy&&!skipped;
+    self.skipVersionButton.title=skipped?@"Version skipped":[NSString stringWithFormat:@"Skip %@",tag?:@""];
+}
+- (NSDictionary *)notificationCandidateIgnoringSkips:(BOOL)ignore {
+    NSDictionary *info=NSBundle.mainBundle.infoDictionary;
+    return WVStartupNotification(self.catalog,info[@"WVReleaseTag"],info[@"WVReleaseChannel"],ignore?@[]:WVSkippedUpdateTags(NSUserDefaults.standardUserDefaults));
+}
+- (void)checkOnStartup {
+    if(self.startupCheckInitiated)return;
+    self.startupCheckInitiated=YES;
+    if(!WVStartupChecksEnabled(NSUserDefaults.standardUserDefaults)){
+        WVWritePrivateUpdateJSON(@{@"pid":@(getpid()),@"startupCheckCount":@0,@"state":@"disabled",@"popupShown":@NO},
+            [NSURL fileURLWithPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Wallpaper Veil/startup-update-check.json"]],NULL);return;
+    }
+    if(self.updateTask||self.installPhase.length)return;
+    self.checkingForStartup=YES;[self checkForUpdates:nil];
+}
+- (void)startupOptionChanged:(id)sender {
+    BOOL requested=[sender state]==NSControlStateValueOn;NSError *error=nil;
+    if(!WVSaveStartupChecksEnabled(NSUserDefaults.standardUserDefaults,requested,&error))self.updateLabel.stringValue=error.localizedDescription?:@"Could not remember that choice. Please try again.";
+    self.startupCheckButton.state=WVStartupChecksEnabled(NSUserDefaults.standardUserDefaults)?NSControlStateValueOn:NSControlStateValueOff;
+    if(!requested&&self.checkingForStartup)[self cancelUpdateCheck];
+}
+- (void)skipVersion:(id)sender {
+    (void)sender;NSDictionary *candidate=[self notificationCandidateIgnoringSkips:YES];NSString *tag=candidate[@"tag"];
+    if(!tag.length)return;NSError *error=nil;
+    if(!WVRememberSkippedUpdate(NSUserDefaults.standardUserDefaults,tag,&error)){
+        self.updateLabel.stringValue=error.localizedDescription?:@"Could not remember this skipped version. Please try again.";return;
+    }
+    self.startupNoticeTag=nil;self.updateLabel.stringValue=[NSString stringWithFormat:@"%@ is skipped for startup notices. You can still install it here.",tag];[self renderCatalog];
 }
 - (void)finishInstallError:(NSString *)message {
     self.installPhase=nil;self.installer=nil;[self.installerPoll invalidate];self.installerPoll=nil;
@@ -201,7 +248,12 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     [NSRunLoop.mainRunLoop addTimer:self.installerPoll forMode:NSRunLoopCommonModes];
 }
 - (void)windowWillClose:(NSNotification *)notification {
-    if(notification.object==self.aboutWindow){[self cancelUpdateCheck];[self cancelInstall];}
+    if(notification.object==self.aboutWindow){
+        if(self.startupNoticeTag.length&&![self.installPhase isEqual:@"handoff"]){
+            WVRememberSkippedUpdate(NSUserDefaults.standardUserDefaults,self.startupNoticeTag,NULL);self.startupNoticeTag=nil;
+        }
+        [self cancelUpdateCheck];[self cancelInstall];
+    }
 }
 - (void)finishUpdate:(NSDictionary *)result {
     // Every terminal path invalidates queued callbacks and the whole-check clock.
@@ -221,6 +273,15 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     self.updateTask = nil;
     self.releasePages = nil;
     [self renderCatalog];
+    BOOL startup=self.checkingForStartup;self.checkingForStartup=NO;
+    if(startup&&![result[@"state"] isEqual:@"error"]&&![result[@"state"] isEqual:@"cancelled"]){
+        NSDictionary *notice=[self notificationCandidateIgnoringSkips:NO];
+        BOOL shown=notice&&!self.aboutWindow.visible;
+        if(shown){self.startupNoticeTag=notice[@"tag"];self.presentingStartupNotice=YES;[self showAbout:nil];self.presentingStartupNotice=NO;}
+        WVWritePrivateUpdateJSON(@{@"pid":@(getpid()),@"startupCheckCount":@1,@"state":result[@"state"]?:@"unknown",@"popupShown":@(shown),
+            @"notifiedTag":shown?notice[@"tag"]:@"",@"stableTag":self.catalog[@"stable"][@"latestTag"]?:@"",@"previewTag":self.catalog[@"preview"][@"latestTag"]?:@""},
+            [NSURL fileURLWithPath:[NSHomeDirectory() stringByAppendingPathComponent:@"Library/Application Support/Wallpaper Veil/startup-update-check.json"]],NULL);
+    }
 }
 - (void)cancelUpdateCheck {
     if (!self.updateTask && !self.updateDeadline) return;
@@ -312,7 +373,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     if (opening) [self.aboutWindow center];
     [self.aboutWindow makeKeyAndOrderFront:nil];
     [NSApp activateIgnoringOtherApps:YES];
-    if(opening && (strcmp(getenv("WV_UI_TEST")?:"","1")!=0 || self.testingAutoCheck) && !self.installPhase.length)[self checkForUpdates:nil];
+    if(opening && !self.presentingStartupNotice && (strcmp(getenv("WV_UI_TEST")?:"","1")!=0 || self.testingAutoCheck) && !self.installPhase.length)[self checkForUpdates:nil];
 }
 - (void)openRepository:(id)sender {
     (void)sender;
@@ -580,7 +641,7 @@ static int WVDiagnostics(lua_State *L) {
             @"stableState": WVController.catalog[@"stable"][@"state"]?:@"idle",
             @"previewState": WVController.catalog[@"preview"][@"state"]?:@"idle",
             @"installPhase": WVController.installPhase?:@"idle",
-            @"automaticCheckOnOpen":@YES, @"updateInProgress": @(WVController.updateTask != nil),
+            @"automaticCheckOnOpen":@YES, @"startupCheckInitiated":@(WVController.startupCheckInitiated), @"startupChecksEnabled":@(WVStartupChecksEnabled(NSUserDefaults.standardUserDefaults)), @"updateInProgress": @(WVController.updateTask != nil),
             @"updateDeadlineActive": @(WVController.updateDeadline.isValid),
             @"desktopControlSettingsPane": WVAccessibilityPaneName(),
             @"desktopControlSettingsURL": WVAccessibilitySettingsURL,
@@ -598,7 +659,7 @@ static int WVDiagnostics(lua_State *L) {
     for (NSString *key in @[@"configured", @"preferencesSuppressed", @"consoleSuppressed",
         @"engineWindowsVisible", @"nativeMainMenuReady", @"aboutWindowCreated", @"aboutVisible",
         @"repositoryActionWired", @"noticesActionWired", @"aboutIconPresent",
-        @"updateActionWired", @"releaseActionWired", @"updateInProgress", @"updateDeadlineActive", @"stableInstallAvailable", @"previewInstallAvailable", @"automaticCheckOnOpen"])
+        @"updateActionWired", @"releaseActionWired", @"updateInProgress", @"updateDeadlineActive", @"stableInstallAvailable", @"previewInstallAvailable", @"automaticCheckOnOpen", @"startupCheckInitiated", @"startupChecksEnabled"])
         WVSetBoolean(L, key.UTF8String, [values[key] boolValue]);
     WVSetString(L, "aboutTitle", values[@"aboutTitle"]);
     WVSetString(L, "repositoryURL", values[@"repositoryURL"]);
@@ -653,6 +714,17 @@ static int WVTestUpdateResponse(lua_State *L) {
         [WVController finishUpdate:result];
     });
     return WVDiagnostics(L);
+}
+static int WVCheckOnStartup(lua_State *L) {
+    WVOnMain(^{if(!WVController)WVConfigureOnMain();[WVController checkOnStartup];});lua_pushboolean(L,YES);return 1;
+}
+static int WVTestStartupCheckOnce(lua_State *L) {
+    if(strcmp(getenv("WV_UI_TEST")?:"","1")!=0)return luaL_error(L,"Startup fixtures require WV_UI_TEST=1");
+    __block BOOL passed=NO;
+    WVOnMain(^{[WVController cancelUpdateCheck];WVController.startupCheckInitiated=NO;
+        [WVController checkOnStartup];NSUInteger generation=WVController.updateGeneration;id task=WVController.updateTask;
+        [WVController checkOnStartup];passed=WVController.startupCheckInitiated&&generation==WVController.updateGeneration&&task==WVController.updateTask;
+        [WVController cancelUpdateCheck];});lua_pushboolean(L,passed);return 1;
 }
 static int WVTestInstallUpdate(lua_State *L) {
     if(strcmp(getenv("WV_UI_TEST")?:"","1")!=0)return luaL_error(L,"Update installation qualification requires WV_UI_TEST=1");
@@ -774,6 +846,7 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
         {"diagnostics", WVDiagnostics}, {"closeAbout", WVCloseAbout},
         {"checkForUpdates", WVCheckForUpdates}, {"cancelUpdateCheck", WVCancelUpdateCheck},
         {"testUpdateResponse", WVTestUpdateResponse},
+        {"checkOnStartup", WVCheckOnStartup}, {"testStartupCheckOnce", WVTestStartupCheckOnce},
         {"testAutomaticAboutCheck", WVTestAutomaticAboutCheck}, {"testInstallUpdate", WVTestInstallUpdate}, {"acknowledgeUpdate", WVAcknowledgeUpdate},
         {"saveAboutPreview", WVSaveAboutPreview},
         {"loginStatus", WVLoginStatus}, {"setLaunchAtLogin", WVSetLaunchAtLogin},
