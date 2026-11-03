@@ -23,6 +23,7 @@ tools/
 diagnostics.json
 acceptance.json
 runtime.pid
+lifecycle-evidence/
 
 # Credentials and signing inputs
 .env
