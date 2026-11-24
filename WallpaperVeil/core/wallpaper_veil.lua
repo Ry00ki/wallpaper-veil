@@ -127,9 +127,12 @@ function M.setEnabled(enabled)
     M.rebuild()
 end
 
+local function validOpacity(value)
+    return type(value) == "number" and value >= 0 and value <= 1
+end
+
 function M.setOpacity(opacity)
-    assert(type(opacity) == "number" and opacity >= 0.10 and opacity <= 0.80,
-        "Wallpaper veil strength must be between 10% and 80%")
+    assert(validOpacity(opacity), "Wallpaper veil strength must be between 0% and 100%")
     M.opacity = opacity
     hs.settings.set(prefix .. "opacity", M.opacity)
     for _, canvas in ipairs(M.canvases) do canvas:alpha(M.setupPreview and M.setupPreview.opacity or M.opacity) end
@@ -150,8 +153,8 @@ function M.previewSetup(color, percent)
     if not M.running then return false, "Wallpaper Veil is no longer running." end
     if M.picker then return false, "Close the custom colour picker to preview Quick Setup." end
     local rgb = type(color) == "string" and M.parseColor(color)
-    if not rgb or type(percent) ~= "number" or percent % 1 ~= 0 or percent < 10 or percent > 80 then
-        return false, "Choose a colour and a strength between 10% and 80%."
+    if not rgb or type(percent) ~= "number" or percent % 1 ~= 0 or not validOpacity(percent / 100) then
+        return false, "Choose a colour and a strength between 0% and 100%."
     end
     local needsCanvases = not M.enabled and not M.setupPreview
     M.setupPreview = {color = rgb, opacity = percent / 100}
@@ -538,10 +541,14 @@ function M.menuItems()
     table.insert(colors, {title = "RGB  " .. M.colorRGB(visibleColor), disabled = true})
     table.insert(colors, {title = "Advanced", menu = {{title = "Enter RGB or Hex…", fn = M.promptColor}}})
     local strengths = {}
-    for _, percent in ipairs({10, 20, 30, 40, 50, 60, 70, 80}) do
+    for percent = 0, 100, 10 do
         local opacity = percent / 100
         table.insert(strengths, {title = string.format("%d%%%s", percent, percent == 40 and " (default)" or ""),
             checked = math.abs(M.opacity - opacity) < 0.001, fn = function() M.setOpacity(opacity) end})
+    end
+    if M.openSettings then
+        table.insert(strengths, {title = "-"})
+        table.insert(strengths, {title = "Fine-tune strength…", fn = function() M.openSettings("wallpaper") end})
     end
     return {
         {title = "Wallpaper tint", checked = M.enabled, fn = function() M.setEnabled(not M.enabled) end},
@@ -613,8 +620,7 @@ function M.start(widgetPreferences)
         M.widgets.start(widgetPreferences)
         M.enabled = hs.settings.get(prefix .. "enabled") ~= false
         local savedOpacity = hs.settings.get(prefix .. "opacity")
-        M.opacity = type(savedOpacity) == "number" and savedOpacity >= 0.10
-            and savedOpacity <= 0.80 and savedOpacity or 0.40
+        M.opacity = validOpacity(savedOpacity) and savedOpacity or 0.40
         M.color = normalizeColor(hs.settings.get(prefix .. "color")) or normalizeColor(presets[3].color)
         M.savedColors = readPalette(hs.settings.get(prefix .. "savedColors"))
         M.deletedColors = readPalette(hs.settings.get(prefix .. "deletedColors"))

@@ -169,28 +169,46 @@ end)
 test("brightness shortcuts adjust the sync source or the active supported display", function()
     local e = create{}.load(app)
     hs.screen.mainScreen = function() return e.follower end
-    assert(e.sync.adjustBrightness(1) and e.follower.value == 0.5 + 1 / 16)
+    local events = {}
+    local function feedback(level, id) events[#events+1] = {level=level,id=id} end
+    assert(e.sync.adjustBrightness(1, feedback) and e.follower.value == 0.5 + 1 / 16)
+    assert(events[1].level == e.follower.value and events[1].id == e.follower:id())
     e.sync.setEnabled(true, true)
-    assert(e.sync.adjustBrightness(-1) and e.source.value == 0.5 - 1 / 16)
+    assert(e.sync.adjustBrightness(-1, feedback) and e.source.value == 0.5 - 1 / 16)
+    assert(events[2].level == e.source.value and events[2].id == e.source:id())
     e.advance(1)
-    assert(e.follower.value == e.source.value)
+    assert(e.follower.value == e.source.value and #events == 2)
     e.source.value = 1
-    assert(e.sync.adjustBrightness(1) and #e.source.writes == 1)
+    assert(e.sync.adjustBrightness(1, feedback) and #e.source.writes == 1 and events[3].level == 1)
+    e.source.value = .01
+    assert(e.sync.adjustBrightness(-1, feedback) and #e.source.writes == 2 and events[4].level == 0)
     e.sync.suspend("display")
-    assert(not e.sync.adjustBrightness(-1))
-    assert(e.source.value == 1)
+    assert(not e.sync.adjustBrightness(-1, feedback) and #events == 4)
+end)
+
+test("shortcut feedback waits for a delayed, quantised hardware read-back", function()
+    local e = create{follower={delay=.2,quantum=.05}}.load(app)
+    hs.screen.mainScreen = function() return e.follower end
+    local events = {}
+    assert(e.sync.adjustBrightness(1, function(level,id) events[#events+1] = {level=level,id=id} end))
+    e.advance(.3)
+    assert(#events == 0 and e.follower.value ~= e.follower.writes[1].value)
+    e.advance(.5)
+    assert(#events == 1 and events[1].level == e.follower.value and events[1].id == e.follower:id())
 end)
 
 test("a brightness shortcut checks for a silent hardware write failure", function()
     local e = create{follower={ignore=function()return true end}}.load(app)
     hs.screen.mainScreen = function() return e.follower end
-    assert(e.sync.adjustBrightness(1) and #e.alerts == 0)
+    local events = 0
+    local function feedback() events = events + 1 end
+    assert(e.sync.adjustBrightness(1, feedback) and #e.alerts == 0)
     e.advance(0.5)
     assert(#e.alerts == 1 and e.alerts[1]:find("confirm", 1, true))
-    assert(e.sync.adjustBrightness(1))
+    assert(e.sync.adjustBrightness(1, feedback))
     e.sync.suspend("display")
     e.advance(1)
-    assert(#e.alerts == 1)
+    assert(#e.alerts == 1 and events == 0)
 end)
 
 print(string.format("Brightness sync: %d focused cases passed", cases))

@@ -5,7 +5,9 @@ Changes are grouped by release. Stable releases and previews are listed separate
 ## Unreleased
 
 - Put wallpaper tint, colour and strength first. Group paired-display sync controls under **Display brightness**.
-- Open a native Settings window with General, Wallpaper, Brightness and Miscellaneous tabs. Explain desktop-control access beside the optional widget automation that uses it.
+- Allow tint strength from 0% to 100%, with 10% presets in the menu and sliders in Settings and Quick Setup.
+- Open a native Settings window with Wallpaper, General, Brightness and App permissions tabs. Keep the tint switch, colours, display sync, hotkey switch and widget actions in the menu. Settings handles fine strength, shortcut recording, startup and permissions.
+- Show confirmed display brightness in a brief, nonactivating indicator when using a Wallpaper Veil brightness shortcut.
 - Offer a first-run **Quick Setup** with live preview, Apply and Cancel. Existing setups keep their preferences. Quick Setup can also open from General.
 - Add optional editable brightness shortcuts. The starting pair is Control–Option–Page Up/Down. The menu switch controls whether they act, and Brightness settings can record and clear each binding.
 - Use the existing About link to GitHub for credits and licence information. Individual licence files stay bundled with the app.

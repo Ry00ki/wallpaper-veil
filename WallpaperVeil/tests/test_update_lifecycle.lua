@@ -24,7 +24,7 @@ local function scenario(mode)
   local autoChecks, installs=0,0
   local native={testStartupCheckOnce=function()return true end,testInstallUpdate=function(channel)assert(channel=="stable");installs=installs+1;return true end,testAutomaticAboutCheck=function()autoChecks=autoChecks+1;return true end,openAccessibilitySettings=function() return true end,showAbout=function() end,closeAbout=function() closed=closed+1 end,
     diagnostics=diagnostic,cancelUpdateCheck=function() cancelled=cancelled+1 end,
-    settingsDiagnostics=function() return {visible=settingsVisible, sections={'wallpaper','general','brightness','misc'}} end,
+    settingsDiagnostics=function() return {visible=settingsVisible, sections={'wallpaper','general','brightness','permissions'}} end,
     closeSettings=function() settingsVisible=false end,
     checkForUpdates=function() live=true end,
     saveAboutPreview=function()
@@ -40,7 +40,7 @@ local function scenario(mode)
       return {updateState=tag=='v0.1.4-preview.1' and 'current' or 'available',latestTag=tag,
         latestURL='https://github.com/Ry00ki/wallpaper-veil/releases/tag/'..tag}
     end}
-  local env=setmetatable({appSettings={open=function() settingsVisible=true end},nativeUI=native,support='/mock',after=after,
+  local env=setmetatable({wallpaperVeil={openSettings=function() settingsVisible=true end},nativeUI=native,support='/mock',after=after,
     os={getenv=function(key)if key=='WV_UPDATE_TEST_CHANNEL' then return mode=='install' and 'stable' or '' end;return '1' end,date=os.date},
     hs={timer={secondsSinceEpoch=function() return now end},json={encode=function(x) return x end},printf=function() end},
     writeReport=function(value,target)

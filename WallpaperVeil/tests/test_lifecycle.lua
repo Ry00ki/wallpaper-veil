@@ -85,6 +85,14 @@ do
   refresh.callback();local visible=0;for _,c in ipairs(w.canvases)do if c.visible then visible=visible+1 end end
   check('Stale refresh cannot recreate tint after stop',0,visible)
 end
+do
+  local w=fresh();local m=veil(w);m.start()
+  for _, value in ipairs({0, 0.99, 1}) do
+    m.setOpacity(value);m.stop();m.start()
+    check('Tint strength survives restart at ' .. tostring(value),value,m.opacity)
+  end
+  m.stop()
+end
 local function runInit(failBrightness)
   local w=fresh();local v=veil(w);package.loaded.wallpaper_veil=v
   package.loaded.display_brightness_sync={

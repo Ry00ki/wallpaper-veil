@@ -237,7 +237,7 @@ function M.settingsChoices()
     return choices
 end
 
-function M.adjustBrightness(direction)
+function M.adjustBrightness(direction, feedback)
     if direction ~= 1 and direction ~= -1 then return false, "Choose brightness up or down." end
     if M.suspended then return false, "Display brightness is unavailable while asleep." end
     local screen, current
@@ -256,21 +256,36 @@ function M.adjustBrightness(direction)
         end
         if current == nil then return false, "No display supports hardware brightness control." end
     end
+    local function showLevel(level)
+        if not feedback then return end
+        local ok, id = pcall(function() return screen:id() end)
+        if ok and id then pcall(feedback, level, id) end
+    end
     local target = math.max(0, math.min(1, current + direction / 16))
-    if target == current then return true end
+    stopHotkeyConfirmation()
+    if target == current then
+        showLevel(current)
+        return true
+    end
     local ok, result = pcall(function() return screen:setBrightness(target) end)
     if not ok or not result then return false, "The display did not accept the brightness change." end
-    stopHotkeyConfirmation()
-    local function changed()
+    local function confirmedLevel()
         local observed = read(screen)
-        return observed ~= nil and direction * (observed - current) > math.min(0.004, math.abs(target - current) / 2)
+        if observed ~= nil and direction * (observed - current) > math.min(0.004, math.abs(target - current) / 2) then
+            return observed
+        end
     end
-    if not changed() then
+    local level = confirmedLevel()
+    if level then
+        showLevel(level)
+    else
         local timer
         timer = hs.timer.doAfter(0.45, function()
             if M.hotkeyConfirmation ~= timer then return end
             M.hotkeyConfirmation = nil
-            if not changed() then hs.alert.show("The display did not confirm the brightness change.") end
+            local confirmed = confirmedLevel()
+            if confirmed then showLevel(confirmed)
+            else hs.alert.show("The display did not confirm the brightness change.") end
         end)
         M.hotkeyConfirmation = timer
     end
@@ -355,6 +370,9 @@ function M.start(veil, hotkeyMenuItem)
         if hotkeyMenuItem then
             brightness[#brightness + 1] = {title = "-"}
             brightness[#brightness + 1] = hotkeyMenuItem()
+            if veil.openSettings then
+                brightness[#brightness + 1] = {title = "Configure brightness shortcuts…", fn = function() veil.openSettings("brightness") end}
+            end
         end
         table.insert(items, insertAt, {title = "Display brightness", menu = brightness})
         return items

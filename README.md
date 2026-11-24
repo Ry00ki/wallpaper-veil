@@ -29,7 +29,7 @@ Current builds are ad hoc signed and not notarized. The stable label describes t
 
 ### Keep your wallpaper, choose its strength
 
-Adjust tint colour and strength, save custom colours, and switch the veil on or off. The original photo stays in place and normal wallpaper rotation continues. Desktop icons and windows remain above the veil.
+Adjust tint colour and strength from 0% to 100%, save custom colours, and switch the veil on or off. The original photo stays in place and normal wallpaper rotation continues. Desktop icons and windows remain above the veil. Use the 10% presets in the menu or Quick Setup, or use the slider for 1% steps.
 
 <details>
 <summary>See colour and strength examples</summary>
@@ -48,20 +48,20 @@ Brightness sync requires native macOS brightness control. Third-party monitor su
 
 ### Quietly in the menu bar
 
-Look for **◐ Veil** in the menu bar. The tint is on by default. **○ Veil** indicates the tint is off. The menu starts with wallpaper tint, colour and strength. **App settings…** opens directly to Wallpaper; General, Brightness and Miscellaneous are alongside it. These changes are in the current source.
+Look for **◐ Veil** in the menu bar. The tint is on by default. **○ Veil** indicates the tint is off. The menu starts with Wallpaper tint, Colour and Strength. **Strength → Fine-tune strength…** opens the slider in Wallpaper settings. **App settings…** also includes General, Brightness and App permissions. These changes are in the current source.
 
 On first use, **Quick Setup** previews colour and strength on your existing wallpaper. Choose **Apply** to keep it or **Cancel** to restore the previous appearance. You can reopen Quick Setup from General.
 
-**Display brightness** groups optional sync and **Enable brightness hotkeys**. Under App settings → Brightness, set or clear Up and Down separately. The starting pair is Control–Option–Page Up and Control–Option–Page Down; shortcuts are off by default. They step the hardware brightness of the sync source or, with sync off, a supported active display. If your compact keyboard uses Fn for Page Up/Down, record the combination from that keyboard so the app uses the key macOS receives.
+**Display brightness** contains the sync and hotkey switches and the source and follower display choices. Choose **Configure brightness shortcuts…** to set or clear Up and Down. The starting pair is Control–Option–Page Up and Control–Option–Page Down. Shortcuts are off by default. They step the hardware brightness of the sync source or, with sync off, a supported active display. Wallpaper Veil briefly shows the brightness reported by that display after an adjustment. If your compact keyboard uses Fn for Page Up/Down, record the combination from that keyboard so the app uses the key macOS receives.
 
 | Settings tab | Controls and macOS requirements |
 | --- | --- |
-| Wallpaper | Switch the tint on or off, choose a colour and strength, or refresh the tint. No Accessibility approval is required. |
+| Wallpaper | Fine-tune strength in 1% steps or refresh the tint. |
 | General | Quick Setup, launch at login and startup update checks. macOS may require approval in Login Items for startup. |
-| Brightness | Synchronise supported displays and record optional brightness shortcuts. Neither Accessibility nor Input Monitoring approval is required. |
-| Miscellaneous | Optional desktop-widget controls. Desktop Control access applies to clock-triggered reveal and to safely revealing widgets while preserving an open Notification Center. Manual show/hide and **Use macOS defaults** do not require that access. |
+| Brightness | Record and clear the increase and decrease shortcuts. |
+| App permissions | The optional Desktop Control access used by two widget automations, and the link to Login Items. Wallpaper tint, brightness and shortcuts work without Accessibility or Input Monitoring. |
 
-**Desktop widgets → Use macOS defaults** stops Wallpaper Veil's widget/clock automation and resets its widget-visibility preference to the macOS built-in default. It clears the three automation choices. Select a clock/Notification Center option, or Show now/Hide now, to opt back into custom behaviour; compatible automation choices can be combined.
+**Desktop widgets → Use macOS defaults** stops Wallpaper Veil's widget and clock automation, resets its widget-visibility preference to the macOS built-in default and clears the three automation choices. Select a clock or Notification Center option, **Show now**, or **Hide now** to use custom behaviour again. Desktop Control access lets Wallpaper Veil detect clock clicks and reveal widgets while keeping Notification Center open.
 
 ![Illustration of the Wallpaper Veil menu-bar item beside the battery and clock](docs/images/menu-bar.png)
 

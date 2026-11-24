@@ -15,7 +15,7 @@ local function fixture(options)
     options=options or {}
     local w={time=0,ax=options.ax~=false,open=options.open==true,timers={},taps={},
         prefs=clone(options.prefs or {unrelated='keep'}),tapFailure=options.tapFailure,
-        hidden=options.hidden,reads=0,writes=0,resets=0,snapshots=0,clockStarts=0,clockStops=0}
+        hidden=options.hidden,reads=0,writes=0,resets=0,snapshots=0,clockStarts=0,clockStops=0,permissionPrompts=0,clockPermissionRequests=0}
     if options.showOnOpen~=nil then w.prefs[prefix..'showOnOpen']=options.showOnOpen end
     local panel={snapshot=function()
         w.snapshots=w.snapshots+1
@@ -28,7 +28,7 @@ local function fixture(options)
         return package.loaded.desktop_widget_clock
     end,stop=function()w.clockRunning=false;w.clockStops=w.clockStops+1 end,
         status=function()return {running=w.clockRunning,waitingForPermission=not w.ax}end,
-        requestPermission=function()return w.ax end}
+        requestPermission=function()w.clockPermissionRequests=w.clockPermissionRequests+1;return hs.accessibilityState(true)end}
     package.loaded.desktop_widget_panel=panel;package.loaded.desktop_widget_clock=clock
     local function timer(kind,callback)
         local value={kind=kind,callback=callback,running=true}
@@ -47,7 +47,10 @@ local function fixture(options)
                 if w.failSave or w.failClear then return false end
                 if not w.ignoreClear then w.prefs[key]=nil end
                 return true
-            end},accessibilityState=function()return w.ax end,
+            end},accessibilityState=function(prompt)
+                if prompt then w.permissionPrompts=w.permissionPrompts+1 end
+                return w.ax
+            end,
         task={new=function()error('Desktop widgets must not spawn subprocesses')end},
         eventtap={event={types={leftMouseDown=1,rightMouseDown=2,keyDown=3}},new=function(_,callback)
             if w.tapFailure=='new_nil' then return nil end
@@ -176,6 +179,49 @@ do
     equal(#w.taps,0,'permission denial creates no tap')
     equal(m.status().error,'Accessibility is needed to keep Notification Center open','denial explains permission')
     equal(m.status().showOnOpen,true,'denial retains configured custom choice')
+    m.stop()
+end
+-- Permission has one explicit app-settings route. Menu choices keep their
+-- existing intent/actions but cannot request access, even after grant changes.
+do
+    local w,m=fixture({ax=false,hidden=1})
+    local function item(title)
+        for _,entry in ipairs(m.menuItems()) do if entry.title==title then return entry end end
+        error('Missing widget menu item '..title)
+    end
+    equal(w.permissionPrompts,0,'opening the widget menu never prompts')
+    item('Show when the clock is clicked').fn()
+    equal(m.status().showOnClockClick,true,'clock menu still saves explicit custom intent')
+    equal(w.clockRunning,true,'clock menu still starts the observer in waiting state')
+    equal(w.clockPermissionRequests,0,'clock menu does not call the prompting bridge')
+    equal(w.permissionPrompts,0,'clock menu never implicitly requests AX access')
+    local route=item('Desktop Control access is in App settings → App permissions')
+    equal(route.disabled,true,'menu explains the single app-permissions route')
+    equal(route.fn,nil,'menu permission explanation is not a second action')
+    for _,entry in ipairs(m.menuItems()) do
+        equal(entry.title=='Allow Accessibility…',false,'old direct Allow action is absent')
+    end
+    item('Show when Notification Center opens').fn()
+    item('Hide when Notification Center closes').fn()
+    equal(m.status().showOnOpen,true,'Notification Center reveal remains in the menu')
+    equal(m.status().hideOnClose,true,'Notification Center hide remains in the menu')
+    equal(w.permissionPrompts,0,'other widget options also do not request access')
+    equal(item('Show now').fn(),true,'manual Show remains available without access')
+    equal(item('Hide now').fn(),true,'manual Hide remains available without access')
+    w.resetFailure=true
+    equal(item('Use macOS defaults').fn(),false,'defaults action remains available on denial and reports failure')
+    local retry=item('Retry macOS defaults')
+    equal(type(retry.fn),'function','failed defaults keeps the Retry action in the menu')
+    w.resetFailure=false
+    equal(retry.fn(),true,'menu Retry still uses the guarded reset')
+    w.ax=true
+    item('Show when the clock is clicked').fn()
+    equal(m.status().showOnClockClick,true,'granted custom clock selection still works')
+    w.ax=false
+    local revoked=item('Desktop Control access is in App settings → App permissions')
+    equal(revoked.disabled,true,'revoked access sends users back to App permissions')
+    equal(w.permissionPrompts,0,'grant/revocation and retry never create a menu prompt')
+    equal(w.clockPermissionRequests,0,'no menu route calls clock permission request')
     m.stop()
 end
 for _,failure in ipairs({'new_nil','new_throw','start_nil','start_throw','disabled','inspect_throw'}) do

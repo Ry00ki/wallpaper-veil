@@ -39,6 +39,7 @@ local function cleanup()
     appActive = false
     if nativeUI and nativeUI.closeSetupWizard then pcall(nativeUI.closeSetupWizard, true) end
     if nativeUI and nativeUI.closeSettings then pcall(nativeUI.closeSettings) end
+    if nativeUI and nativeUI.closeBrightnessIndicator then pcall(nativeUI.closeBrightnessIndicator) end
     if hotkeys then pcall(hotkeys.stop) end
     for _, timer in ipairs(wallpaperVeilAppTimers) do pcall(function() timer:stop() end) end
     wallpaperVeilAppTimers = {}
@@ -105,11 +106,16 @@ local ok, failure = xpcall(function()
     displayBrightnessSync = require("display_brightness_sync")
     hotkeys = require("brightness_hotkeys")
     displayBrightnessSync.start(wallpaperVeil, hotkeys.menuItem)
-    hotkeys.start(displayBrightnessSync.adjustBrightness)
+    hotkeys.start(function(direction)
+        return displayBrightnessSync.adjustBrightness(direction, nativeUI.showBrightnessIndicator)
+    end)
     local lifecycleSync = displayBrightnessSync
     brightnessLifecycleWatcher = hs.caffeinate.watcher.new(function(event)
         if not appActive or displayBrightnessSync ~= lifecycleSync then return end
         local events = hs.caffeinate.watcher
+        if (event == events.systemWillSleep or event == events.screensDidSleep) and nativeUI.closeBrightnessIndicator then
+            pcall(nativeUI.closeBrightnessIndicator)
+        end
         if event == events.systemWillSleep then lifecycleSync.suspend("system")
         elseif event == events.systemDidWake then lifecycleSync.resume("system")
         elseif event == events.screensDidSleep then lifecycleSync.suspend("display")
@@ -117,12 +123,13 @@ local ok, failure = xpcall(function()
     end)
     brightnessLifecycleWatcher:start()
     local appSettings = require("app_settings")
+    wallpaperVeil.openSettings = function(section)
+        if appActive then appSettings.open(nativeUI, wallpaperVeil, startSetup, hotkeys, section) end
+    end
     local baseMenu = wallpaperVeil.menuItems
     wallpaperVeil.menuItems = function(...)
         local items = baseMenu(...)
-        items[#items+1] = {title="App settings…", fn=function()
-            appSettings.open(nativeUI, wallpaperVeil, displayBrightnessSync, startSetup, hotkeys)
-        end}
+        items[#items+1] = {title="App settings…", fn=function() wallpaperVeil.openSettings() end}
         items[#items+1] = {title="-"}
         items[#items+1] = {title="Quit Wallpaper Veil", fn=quit}
         items[#items+1] = {title="About Wallpaper Veil", fn=function()
@@ -195,11 +202,11 @@ local ok, failure = xpcall(function()
         end
         after(1, function()
             local success, err = xpcall(function()
-                appSettings.open(nativeUI, wallpaperVeil, displayBrightnessSync, startSetup, hotkeys)
+                wallpaperVeil.openSettings()
                 local settings = nativeUI.settingsDiagnostics()
                 nativeUI.closeSettings()
                 local settingsOK = settings.visible == true
-                    and table.concat(settings.sections, ",") == "wallpaper,general,brightness,misc"
+                    and table.concat(settings.sections, ",") == "wallpaper,general,brightness,permissions"
                 nativeUI.showAbout()
                 after(0.5, function()
                     local captured, problem = xpcall(function()

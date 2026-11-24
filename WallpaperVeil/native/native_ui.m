@@ -11,6 +11,7 @@
 #import "update_notifications.h"
 #import "settings_window.h"
 #import "setup_wizard.h"
+#import "brightness_indicator.h"
 
 // App-owned UI only. Never alter NSWindowController or another application's UI.
 static NSString * const WVName = @"Wallpaper Veil";
@@ -848,6 +849,7 @@ static int WVRestoreWidgetPreferenceForTest(lua_State *L) {
 __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L) {
     static const luaL_Reg functions[] = {
         {"configure", WVConfigure}, {"showAbout", WVShowAbout},
+        {"showBrightnessIndicator", WVShowBrightnessIndicator}, {"closeBrightnessIndicator", WVCloseBrightnessIndicator},
         {"diagnostics", WVDiagnostics}, {"closeAbout", WVCloseAbout},
         {"showSettings", WVShowSettings}, {"closeSettings", WVCloseSettings}, {"settingsDiagnostics", WVSettingsDiagnostics},
         {"showSetupWizard", WVShowSetupWizard}, {"closeSetupWizard", WVCloseSetupWizard}, {"setupWizardDiagnostics", WVSetupWizardDiagnostics},

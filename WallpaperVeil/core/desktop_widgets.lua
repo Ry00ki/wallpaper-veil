@@ -307,7 +307,6 @@ function M.menuItems()
         {title='Custom behaviour',disabled=true},
         {title='Show when the clock is clicked',checked=managed and showOnClockClick,fn=function()
             M.setShowOnClockClick(not (mode=='managed' and showOnClockClick))
-            if showOnClockClick and clock and clock.status().waitingForPermission then M.allowClockClicks() end
         end},
         {title='Show when Notification Center opens',checked=managed and showOnOpen,
             fn=function()M.setShowOnOpen(not (mode=='managed' and showOnOpen))end},
@@ -318,7 +317,7 @@ function M.menuItems()
     if managed and (showOnClockClick or showOnOpen) and not hs.accessibilityState(false) then
         items[#items+1]={title='-'}
         items[#items+1]={title='Automatic reveal needs Accessibility permission',disabled=true}
-        items[#items+1]={title='Allow Accessibility…',fn=function()hs.accessibilityState(true)end}
+        items[#items+1]={title='Desktop Control access is in App settings → App permissions',disabled=true}
     elseif clock and showOnClockClick and clock.status().error then
         items[#items+1]={title=clock.status().error,disabled=true}
     end

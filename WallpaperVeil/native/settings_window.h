@@ -3,6 +3,7 @@
 #import <AppKit/AppKit.h>
 #include "lua.h"
 #include "lauxlib.h"
+#include <math.h>
 #import "shortcut_recorder.h"
 
 // The window renders app-owned Lua snapshots. Only explicit control actions
@@ -23,7 +24,7 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
     NSMutableArray *sections = [NSMutableArray array];
     for (id section in value[@"sections"]) {
         if (![section isKindOfClass:NSDictionary.class] ||
-            ![@[@"general", @"wallpaper", @"brightness", @"misc"] containsObject:section[@"id"]] ||
+            ![@[@"general", @"wallpaper", @"brightness", @"permissions"] containsObject:section[@"id"]] ||
             [sectionIDs containsObject:section[@"id"]] ||
             ![section[@"title"] isKindOfClass:NSString.class] ||
             ![section[@"rows"] isKindOfClass:NSArray.class]) {
@@ -33,7 +34,7 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
         [sectionIDs addObject:section[@"id"]];
         for (id row in section[@"rows"]) {
             if (![row isKindOfClass:NSDictionary.class] ||
-                ![@[@"toggle", @"choice", @"button", @"note", @"shortcut"] containsObject:row[@"type"]]) {
+                ![@[@"toggle", @"choice", @"button", @"note", @"shortcut", @"range"] containsObject:row[@"type"]]) {
                 if (failure) *failure = @"A settings control could not be read. Close this window and try again.";
                 return nil;
             }
@@ -54,6 +55,15 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
             if ([row[@"type"] isEqual:@"toggle"] && ![row[@"value"] isKindOfClass:NSNumber.class]) {
                 if (failure) *failure = @"A settings value could not be read.";
                 return nil;
+            }
+            if ([row[@"type"] isEqual:@"range"]) {
+                id number = row[@"value"];
+                double percent = [number isKindOfClass:NSNumber.class] ? [number doubleValue] : NAN;
+                if (![number isKindOfClass:NSNumber.class] || CFGetTypeID((__bridge CFTypeRef)number) == CFBooleanGetTypeID() ||
+                    !isfinite(percent) || percent < 0 || percent > 100 || floor(percent) != percent) {
+                    if (failure) *failure = @"Strength must be a whole percentage from 0 to 100.";
+                    return nil;
+                }
             }
             if ([row[@"type"] isEqual:@"shortcut"] && ![row[@"value"] isKindOfClass:NSString.class]) {
                 if (failure) *failure = @"A shortcut could not be read.";
@@ -88,6 +98,19 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
 - (BOOL)isFlipped { return YES; }
 @end
 
+// A noncontinuous slider commits only on release. Focus refreshes can run in
+// AppKit's tracking loop, so defer rebuilding this control until tracking ends.
+@interface WVSettingsRangeSlider : NSSlider
+@property(nonatomic, copy) void (^trackingChanged)(BOOL tracking);
+@end
+@implementation WVSettingsRangeSlider
+- (void)mouseDown:(NSEvent *)event {
+    if (self.trackingChanged) self.trackingChanged(YES);
+    @try { [super mouseDown:event]; }
+    @finally { if (self.trackingChanged) self.trackingChanged(NO); }
+}
+@end
+
 @interface WVSettingsController : NSObject <NSWindowDelegate>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) WVShortcutRecorder *shortcutRecorder;
@@ -100,6 +123,7 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
 @property(nonatomic) BOOL refreshQueued;
 @property(nonatomic) BOOL refreshing;
 @property(nonatomic) BOOL performing;
+@property(nonatomic) BOOL trackingRange;
 @property(nonatomic) BOOL snapshotValid;
 @property(nonatomic) NSUInteger refreshGeneration;
 @property(nonatomic, copy) NSString *selectedSection;
@@ -107,6 +131,7 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
 @property(nonatomic, strong) NSArray<NSDictionary *> *sections;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, NSControl *> *controls;
 @property(nonatomic, strong) NSMutableDictionary<NSString *, NSDictionary *> *rows;
+@property(nonatomic, strong) NSMutableDictionary<NSString *, NSTextField *> *rangeReadouts;
 - (void)refresh;
 - (void)queueRefresh;
 - (void)closeAndRelease;
@@ -123,7 +148,7 @@ static WVSettingsController *WVSettings;
 - (void)releaseCallbacks {
     // End recording while the original action closure is still valid.
     [self.shortcutRecorder cancel:nil]; self.shortcutRecorder = nil;
-    self.bindingGeneration++;
+    self.bindingGeneration++; self.trackingRange = NO;
     if (self.luaState) {
         luaL_unref(self.luaState, LUA_REGISTRYINDEX, self.snapshotReference);
         luaL_unref(self.luaState, LUA_REGISTRYINDEX, self.actionReference);
@@ -224,6 +249,31 @@ static WVSettingsController *WVSettings;
         [label setContentCompressionResistancePriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
         [column addArrangedSubview:line]; [line.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
         control = popup;
+    } else if ([type isEqual:@"range"]) {
+        NSTextField *title = [NSTextField labelWithString:row[@"title"]];
+        title.font = [NSFont systemFontOfSize:13]; [column addArrangedSubview:title];
+        NSStackView *line = [[NSStackView alloc] init];
+        line.orientation = NSUserInterfaceLayoutOrientationHorizontal; line.alignment = NSLayoutAttributeCenterY; line.spacing = 12;
+        WVSettingsRangeSlider *slider = [[WVSettingsRangeSlider alloc] initWithFrame:NSZeroRect];
+        slider.minValue = 0; slider.maxValue = 100; slider.integerValue = [row[@"value"] integerValue];
+        slider.continuous = NO; slider.target = self; slider.action = @selector(performControl:);
+        slider.accessibilityLabel = row[@"title"];
+        [slider setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+        [slider.widthAnchor constraintGreaterThanOrEqualToConstant:140].active = YES;
+        NSTextField *readout = [NSTextField labelWithString:[NSString stringWithFormat:@"%ld%%", (long)slider.integerValue]];
+        readout.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
+        readout.alignment = NSTextAlignmentRight; [readout.widthAnchor constraintEqualToConstant:44].active = YES;
+        self.rangeReadouts[identifier] = readout;
+        NSUInteger generation = self.bindingGeneration; __weak WVSettingsController *owner = self;
+        slider.trackingChanged = ^(BOOL tracking) {
+            WVSettingsController *current = owner;
+            if (current.bindingGeneration != generation) return;
+            current.trackingRange = tracking;
+            if (!tracking) [current refresh];
+        };
+        [line addArrangedSubview:slider]; [line addArrangedSubview:readout];
+        [column addArrangedSubview:line]; [line.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
+        control = slider;
     } else if ([type isEqual:@"shortcut"]) {
         NSTextField *title = [NSTextField labelWithString:row[@"title"]];
         title.font = [NSFont systemFontOfSize:13]; [column addArrangedSubview:title];
@@ -273,13 +323,14 @@ static WVSettingsController *WVSettings;
     return scroll;
 }
 - (void)refresh {
-    if (self.refreshing || self.performing || !self.luaState || !self.window) return;
+    if (self.refreshing || self.performing || self.trackingRange || !self.luaState || !self.window) return;
     self.refreshing = YES; self.refreshGeneration++;
     NSString *failure = nil; NSArray *sections = [self readSections:&failure];
     if (sections) {
         if (!self.snapshotValid || ![sections isEqual:self.sections]) {
             NSString *selected = self.tabs.selectedTabViewItem.identifier ?: self.selectedSection;
             self.controls = [NSMutableDictionary dictionary]; self.rows = [NSMutableDictionary dictionary];
+            self.rangeReadouts = [NSMutableDictionary dictionary];
             for (NSTabViewItem *item in [self.tabs.tabViewItems copy]) [self.tabs removeTabViewItem:item];
             self.sections = sections;
             for (NSDictionary *section in sections) {
@@ -318,7 +369,7 @@ static WVSettingsController *WVSettings;
     if (notification.object != self.window) return;
     self.selectedSection = nil;
     [self releaseCallbacks]; self.window = nil; self.tabs = nil; self.statusLabel = nil;
-    self.sections = @[]; self.controls = nil; self.rows = nil; self.lastError = nil; self.snapshotValid = NO;
+    self.sections = @[]; self.controls = nil; self.rows = nil; self.rangeReadouts = nil; self.lastError = nil; self.snapshotValid = NO;
 }
 - (void)closeAndRelease {
     if (self.window) [self.window close]; else [self releaseCallbacks];
@@ -329,7 +380,10 @@ static WVSettingsController *WVSettings;
     self.performing = YES; lua_State *state = self.luaState; int top = lua_gettop(state);
     lua_rawgeti(state, LUA_REGISTRYINDEX, self.actionReference);
     lua_pushstring(state, identifier.UTF8String);
-    if ([value isKindOfClass:NSNumber.class]) lua_pushboolean(state, [value boolValue]);
+    if ([value isKindOfClass:NSNumber.class]) {
+        if (CFGetTypeID((__bridge CFTypeRef)value) == CFBooleanGetTypeID()) lua_pushboolean(state, [value boolValue]);
+        else lua_pushinteger(state, [value integerValue]);
+    }
     else if ([value isKindOfClass:NSString.class]) lua_pushstring(state, [value UTF8String]);
     else lua_pushnil(state);
     NSString *failure = nil;
@@ -370,13 +424,23 @@ static WVSettingsController *WVSettings;
     if (self.shortcutRecorder) { [self.shortcutRecorder.window makeKeyAndOrderFront:nil]; return; }
     if ([row[@"type"] isEqual:@"shortcut"]) { [self recordShortcut:control]; return; }
     id value = nil;
-    if ([row[@"type"] isEqual:@"toggle"]) value = @(((NSButton *)control).state == NSControlStateValueOn);
-    else if ([row[@"type"] isEqual:@"choice"]) {
+    if ([row[@"type"] isEqual:@"toggle"]) value = [NSNumber numberWithBool:((NSButton *)control).state == NSControlStateValueOn];
+    else if ([row[@"type"] isEqual:@"range"]) {
+        NSSlider *slider = (NSSlider *)self.controls[control.identifier];
+        if (!slider.enabled) return;
+        if (![control isKindOfClass:NSSlider.class] || !isfinite(slider.doubleValue)) return;
+        NSInteger percent = (NSInteger)lround(slider.doubleValue);
+        if (percent < 0 || percent > 100) return;
+        slider.integerValue = percent;
+        self.rangeReadouts[control.identifier].stringValue = [NSString stringWithFormat:@"%ld%%", (long)percent];
+        value = @(percent);
+    } else if ([row[@"type"] isEqual:@"choice"]) {
         NSMenuItem *item = ((NSPopUpButton *)control).selectedItem;
         if (!item.enabled || ![item.representedObject isKindOfClass:NSString.class]) return;
         value = item.representedObject;
     }
     self.lastError = [self performAction:control.identifier value:value];
+    if ([row[@"type"] isEqual:@"range"]) self.snapshotValid = NO;
     [self refresh];
 }
 @end
@@ -384,6 +448,12 @@ static WVSettingsController *WVSettings;
 static int WVShowSettings(lua_State *state) {
     luaL_checktype(state, 1, LUA_TFUNCTION); luaL_checktype(state, 2, LUA_TFUNCTION);
     if (!NSThread.isMainThread) return luaL_error(state, "Settings must be opened on the application thread");
+    NSString *requestedSection = nil;
+    if (!lua_isnoneornil(state, 3)) {
+        requestedSection = [NSString stringWithUTF8String:luaL_checkstring(state, 3)];
+        BOOL validSection = [@[@"wallpaper", @"general", @"brightness", @"permissions"] containsObject:requestedSection];
+        luaL_argcheck(state, validSection, 3, "unknown settings section");
+    }
     lua_pushvalue(state, 1); int snapshot = luaL_ref(state, LUA_REGISTRYINDEX);
     lua_pushvalue(state, 2); int action = luaL_ref(state, LUA_REGISTRYINDEX);
     if (!WVSettings) WVSettings = [[WVSettingsController alloc] init];
@@ -392,6 +462,13 @@ static int WVShowSettings(lua_State *state) {
     [WVSettings.window makeKeyAndOrderFront:nil]; [NSApp activateIgnoringOtherApps:YES];
     // The explicit refresh supersedes any focus refresh queued by opening.
     [WVSettings refresh];
+    if (requestedSection) {
+        for (NSTabViewItem *item in WVSettings.tabs.tabViewItems) {
+            if ([item.identifier isEqual:requestedSection]) {
+                [WVSettings.tabs selectTabViewItem:item]; WVSettings.selectedSection = requestedSection; break;
+            }
+        }
+    }
     lua_pushboolean(state, YES); return 1;
 }
 static int WVCloseSettings(lua_State *state) {
@@ -424,6 +501,8 @@ static int WVSettingsDiagnostics(lua_State *state) {
             lua_pushboolean(state, control.enabled); lua_setfield(state, -2, "enabled");
             if ([row[@"type"] isEqual:@"toggle"]) {
                 lua_pushboolean(state, ((NSButton *)control).state == NSControlStateValueOn); lua_setfield(state, -2, "value");
+            } else if ([row[@"type"] isEqual:@"range"]) {
+                lua_pushinteger(state, ((NSSlider *)control).integerValue); lua_setfield(state, -2, "value");
             } else if ([row[@"type"] isEqual:@"choice"]) {
                 lua_pushinteger(state, ((NSPopUpButton *)control).numberOfItems); lua_setfield(state, -2, "optionCount");
             }
