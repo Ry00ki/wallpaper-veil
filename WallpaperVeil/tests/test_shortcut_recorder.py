@@ -1,11 +1,14 @@
 """Compile/test pure local shortcut policy; no native window or input capture."""
+import platform
 from pathlib import Path
 import subprocess
 import tempfile
 import unittest
 
+
+@unittest.skipUnless(platform.system() == "Darwin", "AppKit tests require macOS")
 class ShortcutRecorderTests(unittest.TestCase):
-    def test_physical_chords(self):
+    def test_appkit_chord_encoding(self):
         own = Path(__file__).resolve().parents[1]
         with tempfile.TemporaryDirectory(prefix="wallpaper-veil-shortcut-policy-") as directory:
             executable = Path(directory) / "shortcut-policy"
