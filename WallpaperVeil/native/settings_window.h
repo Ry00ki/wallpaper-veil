@@ -5,6 +5,7 @@
 #include "lauxlib.h"
 #include <math.h>
 #import "shortcut_recorder.h"
+#import "strength_slider.h"
 
 // The window renders app-owned Lua snapshots. Only explicit control actions
 // call perform; opening, focusing and diagnostics never perform an action.
@@ -98,19 +99,6 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
 - (BOOL)isFlipped { return YES; }
 @end
 
-// A noncontinuous slider commits only on release. Focus refreshes can run in
-// AppKit's tracking loop, so defer rebuilding this control until tracking ends.
-@interface WVSettingsRangeSlider : NSSlider
-@property(nonatomic, copy) void (^trackingChanged)(BOOL tracking);
-@end
-@implementation WVSettingsRangeSlider
-- (void)mouseDown:(NSEvent *)event {
-    if (self.trackingChanged) self.trackingChanged(YES);
-    @try { [super mouseDown:event]; }
-    @finally { if (self.trackingChanged) self.trackingChanged(NO); }
-}
-@end
-
 @interface WVSettingsController : NSObject <NSWindowDelegate>
 @property(nonatomic, strong) NSWindow *window;
 @property(nonatomic, strong) WVShortcutRecorder *shortcutRecorder;
@@ -135,6 +123,7 @@ static NSArray<NSDictionary *> *WVSettingsSections(NSData *data, NSString **fail
 - (void)refresh;
 - (void)queueRefresh;
 - (void)closeAndRelease;
+- (void)performControl:(NSControl *)control;
 - (NSString *)performAction:(NSString *)identifier value:(id)value;
 @end
 static WVSettingsController *WVSettings;
@@ -250,29 +239,38 @@ static WVSettingsController *WVSettings;
         [column addArrangedSubview:line]; [line.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
         control = popup;
     } else if ([type isEqual:@"range"]) {
+        NSStackView *header = [[NSStackView alloc] init];
+        header.orientation = NSUserInterfaceLayoutOrientationHorizontal;
+        header.alignment = NSLayoutAttributeCenterY;
         NSTextField *title = [NSTextField labelWithString:row[@"title"]];
-        title.font = [NSFont systemFontOfSize:13]; [column addArrangedSubview:title];
-        NSStackView *line = [[NSStackView alloc] init];
-        line.orientation = NSUserInterfaceLayoutOrientationHorizontal; line.alignment = NSLayoutAttributeCenterY; line.spacing = 12;
-        WVSettingsRangeSlider *slider = [[WVSettingsRangeSlider alloc] initWithFrame:NSZeroRect];
-        slider.minValue = 0; slider.maxValue = 100; slider.integerValue = [row[@"value"] integerValue];
-        slider.continuous = NO; slider.target = self; slider.action = @selector(performControl:);
+        title.font = [NSFont systemFontOfSize:13];
+        [title setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
+        WVStrengthScale *scale = [[WVStrengthScale alloc] initWithFrame:NSZeroRect];
+        WVStrengthSlider *slider = scale.slider;
+        slider.integerValue = [row[@"value"] integerValue];
+        slider.continuous = YES; slider.target = self; slider.action = @selector(performControl:);
         slider.accessibilityLabel = row[@"title"];
-        [slider setContentHuggingPriority:NSLayoutPriorityDefaultLow forOrientation:NSLayoutConstraintOrientationHorizontal];
-        [slider.widthAnchor constraintGreaterThanOrEqualToConstant:140].active = YES;
         NSTextField *readout = [NSTextField labelWithString:[NSString stringWithFormat:@"%ld%%", (long)slider.integerValue]];
         readout.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
         readout.alignment = NSTextAlignmentRight; [readout.widthAnchor constraintEqualToConstant:44].active = YES;
         self.rangeReadouts[identifier] = readout;
         NSUInteger generation = self.bindingGeneration; __weak WVSettingsController *owner = self;
+        // Update the number while dragging, then persist once after tracking ends.
         slider.trackingChanged = ^(BOOL tracking) {
             WVSettingsController *current = owner;
             if (current.bindingGeneration != generation) return;
             current.trackingRange = tracking;
-            if (!tracking) [current refresh];
+            if (tracking) return;
+            WVStrengthSlider *active = (WVStrengthSlider *)current.controls[identifier];
+            if (active.enabled && active.integerValue != [current.rows[identifier][@"value"] integerValue]) {
+                [current performControl:active];
+            } else {
+                [current refresh];
+            }
         };
-        [line addArrangedSubview:slider]; [line addArrangedSubview:readout];
-        [column addArrangedSubview:line]; [line.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
+        [header addArrangedSubview:title]; [header addArrangedSubview:readout];
+        [column addArrangedSubview:header]; [header.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
+        [column addArrangedSubview:scale]; [scale.widthAnchor constraintEqualToAnchor:column.widthAnchor].active = YES;
         control = slider;
     } else if ([type isEqual:@"shortcut"]) {
         NSTextField *title = [NSTextField labelWithString:row[@"title"]];
@@ -329,6 +327,8 @@ static WVSettingsController *WVSettings;
     if (sections) {
         if (!self.snapshotValid || ![sections isEqual:self.sections]) {
             NSString *selected = self.tabs.selectedTabViewItem.identifier ?: self.selectedSection;
+            NSResponder *focused = self.window.firstResponder;
+            NSString *focusedSlider = [focused isKindOfClass:WVStrengthSlider.class] ? ((WVStrengthSlider *)focused).identifier : nil;
             self.controls = [NSMutableDictionary dictionary]; self.rows = [NSMutableDictionary dictionary];
             self.rangeReadouts = [NSMutableDictionary dictionary];
             for (NSTabViewItem *item in [self.tabs.tabViewItems copy]) [self.tabs removeTabViewItem:item];
@@ -339,6 +339,8 @@ static WVSettingsController *WVSettings;
             }
             for (NSTabViewItem *item in self.tabs.tabViewItems)
                 if ([item.identifier isEqual:selected]) { [self.tabs selectTabViewItem:item]; break; }
+            NSControl *restored = focusedSlider ? self.controls[focusedSlider] : nil;
+            if (restored.enabled) [self.window makeFirstResponder:restored];
         }
         self.snapshotValid = YES;
         self.statusLabel.stringValue = self.lastError ?: @"";
@@ -426,13 +428,12 @@ static WVSettingsController *WVSettings;
     id value = nil;
     if ([row[@"type"] isEqual:@"toggle"]) value = [NSNumber numberWithBool:((NSButton *)control).state == NSControlStateValueOn];
     else if ([row[@"type"] isEqual:@"range"]) {
-        NSSlider *slider = (NSSlider *)self.controls[control.identifier];
-        if (!slider.enabled) return;
-        if (![control isKindOfClass:NSSlider.class] || !isfinite(slider.doubleValue)) return;
-        NSInteger percent = (NSInteger)lround(slider.doubleValue);
-        if (percent < 0 || percent > 100) return;
+        WVStrengthSlider *slider = (WVStrengthSlider *)self.controls[control.identifier];
+        if (control != slider || !isfinite(slider.doubleValue)) return;
+        NSInteger percent = [slider selectedPercent];
         slider.integerValue = percent;
         self.rangeReadouts[control.identifier].stringValue = [NSString stringWithFormat:@"%ld%%", (long)percent];
+        if (self.trackingRange) return;
         value = @(percent);
     } else if ([row[@"type"] isEqual:@"choice"]) {
         NSMenuItem *item = ((NSPopUpButton *)control).selectedItem;

@@ -1,6 +1,7 @@
 #ifndef WV_SETUP_WIZARD_H
 #define WV_SETUP_WIZARD_H
 #import <AppKit/AppKit.h>
+#import "strength_slider.h"
 #include <math.h>
 #include "lua.h"
 #include "lauxlib.h"
@@ -32,8 +33,7 @@ static NSDictionary *WVSetupModel(NSData *data) {
 @property(nonatomic, strong) NSArray<NSTextField *> *statusLabels;
 @property(nonatomic, strong) NSArray<NSButton *> *primaryButtons;
 @property(nonatomic, strong) NSPopUpButton *colourPopup;
-@property(nonatomic, strong) NSSlider *strengthSlider;
-@property(nonatomic, strong) NSPopUpButton *strengthPopup;
+@property(nonatomic, strong) WVStrengthSlider *strengthSlider;
 @property(nonatomic, strong) NSTextField *strengthLabel;
 @property(nonatomic, strong) NSButton *applyButton;
 @property(nonatomic, assign) lua_State *luaState;
@@ -123,8 +123,8 @@ static WVSetupWizardController *WVSetupWizard;
     NSTextField *previewText = [self label:@"Changes are previewed until you Apply."
         frame:NSMakeRect(34, 220, 450, 22) size:13 weight:NSFontWeightRegular];
     previewText.textColor = NSColor.secondaryLabelColor; [preview addSubview:previewText];
-    [preview addSubview:[self label:@"Colour" frame:NSMakeRect(34, 180, 130, 24) size:13 weight:NSFontWeightMedium]];
-    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(175, 173, 310, 32) pullsDown:NO];
+    [preview addSubview:[self label:@"Colour" frame:NSMakeRect(34, 188, 130, 24) size:13 weight:NSFontWeightMedium]];
+    NSPopUpButton *popup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(175, 181, 310, 32) pullsDown:NO];
     popup.identifier = @"setupColour"; popup.accessibilityLabel = @"Wallpaper tint colour"; popup.target = self; popup.action = @selector(previewChanged:);
     NSUInteger colourIndex = 0;
     for (NSDictionary *colour in model[@"colors"]) {
@@ -133,31 +133,20 @@ static WVSetupWizardController *WVSetupWizard;
         if ([colour[@"value"] isEqual:self.colour]) [popup selectItem:item];
     }
     [preview addSubview:popup]; self.colourPopup = popup;
-    [preview addSubview:[self label:@"Strength" frame:NSMakeRect(34, 134, 130, 24) size:13 weight:NSFontWeightMedium]];
-    NSSlider *slider = [NSSlider sliderWithValue:self.strength minValue:0 maxValue:100 target:self action:@selector(previewChanged:)];
-    slider.frame = NSMakeRect(175, 132, 170, 28); slider.continuous = YES; slider.identifier = @"setupStrength";
-    slider.accessibilityLabel = @"Wallpaper tint strength, 0 to 100 percent";
-    [preview addSubview:slider]; self.strengthSlider = slider;
-    self.strengthLabel = [self label:[NSString stringWithFormat:@"%ld%%", (long)self.strength]
-        frame:NSMakeRect(350, 135, 48, 22) size:13 weight:NSFontWeightRegular];
+    [preview addSubview:[self label:@"Strength" frame:NSMakeRect(34, 161, 130, 19) size:13 weight:NSFontWeightMedium]];
+    self.strengthLabel = [NSTextField labelWithString:[NSString stringWithFormat:@"%ld%%", (long)self.strength]];
+    self.strengthLabel.frame = NSMakeRect(438, 161, 48, 19);
+    self.strengthLabel.font = [NSFont monospacedDigitSystemFontOfSize:13 weight:NSFontWeightRegular];
+    self.strengthLabel.alignment = NSTextAlignmentRight;
     [preview addSubview:self.strengthLabel];
-    NSPopUpButton *strengthPopup = [[NSPopUpButton alloc] initWithFrame:NSMakeRect(401, 130, 84, 32) pullsDown:NO];
-    strengthPopup.identifier = @"setupStrengthPreset";
-    strengthPopup.accessibilityLabel = @"Wallpaper tint strength preset";
-    strengthPopup.toolTip = @"Choose a tint strength preset";
-    strengthPopup.target = self; strengthPopup.action = @selector(previewChanged:);
-    strengthPopup.menu.autoenablesItems = NO;
-    [strengthPopup addItemWithTitle:@"Presets"];
-    strengthPopup.lastItem.tag = -1; strengthPopup.lastItem.enabled = NO;
-    for (NSInteger percent = 0; percent <= 100; percent += 10) {
-        [strengthPopup addItemWithTitle:[NSString stringWithFormat:@"%ld%%", (long)percent]];
-        strengthPopup.lastItem.tag = percent;
-        strengthPopup.lastItem.representedObject = @(percent);
-    }
-    [strengthPopup selectItemWithTag:self.strength % 10 == 0 ? self.strength : -1];
-    [preview addSubview:strengthPopup]; self.strengthPopup = strengthPopup;
+    WVStrengthScale *scale = [[WVStrengthScale alloc] initWithFrame:NSMakeRect(34, 107, 452, WVStrengthScaleHeight)];
+    WVStrengthSlider *slider = scale.slider;
+    slider.integerValue = self.strength; slider.target = self; slider.action = @selector(previewChanged:);
+    slider.continuous = YES; slider.identifier = @"setupStrength";
+    slider.accessibilityLabel = @"Wallpaper tint strength, 0 to 100 percent";
+    [preview addSubview:scale]; self.strengthSlider = slider;
     self.applyButton = [self button:@"Apply" frame:NSMakeRect(376, 20, 110, 32) action:@selector(apply:) page:preview];
-    popup.nextKeyView = slider; slider.nextKeyView = strengthPopup; strengthPopup.nextKeyView = self.applyButton;
+    popup.nextKeyView = slider; slider.nextKeyView = self.applyButton;
     [primary addObject:self.applyButton];
     NSButton *previewCancel = [self button:@"Cancel" frame:NSMakeRect(34, 20, 100, 32) action:@selector(cancel:) page:preview];
     previewCancel.keyEquivalent = @"\033";
@@ -186,16 +175,11 @@ static WVSetupWizardController *WVSetupWizard;
     self.previewValid = [self perform:@"preview"]; self.applyButton.enabled = self.previewValid;
 }
 - (void)previewChanged:(id)sender {
+    (void)sender;
     if (self.stage != 2 || self.performing) return;
-    if (sender == self.strengthPopup) {
-        NSNumber *preset = self.strengthPopup.selectedItem.representedObject;
-        if (![preset isKindOfClass:NSNumber.class]) return;
-        self.strengthSlider.integerValue = preset.integerValue;
-    }
     self.colour = self.colourPopup.selectedItem.representedObject;
-    self.strength = MAX(0, MIN(100, (NSInteger)lround(self.strengthSlider.doubleValue)));
+    self.strength = [self.strengthSlider selectedPercent];
     self.strengthSlider.integerValue = self.strength;
-    [self.strengthPopup selectItemWithTag:self.strength % 10 == 0 ? self.strength : -1];
     self.strengthLabel.stringValue = [NSString stringWithFormat:@"%ld%%", (long)self.strength];
     self.previewActive = YES; self.previewValid = [self perform:@"preview"];
     self.applyButton.enabled = self.previewValid;
@@ -234,7 +218,7 @@ static WVSetupWizardController *WVSetupWizard;
     if (self.luaState) luaL_unref(self.luaState, LUA_REGISTRYINDEX, self.callbackReference);
     self.callbackReference = LUA_NOREF; self.luaState = NULL; self.window = nil;
     self.pages = nil; self.statusLabels = nil; self.primaryButtons = nil;
-    self.colourPopup = nil; self.strengthSlider = nil; self.strengthPopup = nil; self.strengthLabel = nil; self.applyButton = nil;
+    self.colourPopup = nil; self.strengthSlider = nil; self.strengthLabel = nil; self.applyButton = nil;
 }
 - (void)openRepository:(id)sender {
     (void)sender;

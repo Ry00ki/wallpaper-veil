@@ -29,7 +29,7 @@ Current builds are ad hoc signed and not notarized. The stable label describes t
 
 ### Keep your wallpaper, choose its strength
 
-Adjust tint colour and strength from 0% to 100%, save custom colours, and switch the veil on or off. The original photo stays in place and normal wallpaper rotation continues. Desktop icons and windows remain above the veil. Use the 10% presets in the menu or Quick Setup, or use the slider for 1% steps.
+Adjust tint colour and strength from 0% to 100%, save custom colours, and switch the veil on or off. The original photo stays in place and normal wallpaper rotation continues. Desktop icons and windows remain above the veil. In Settings or Quick Setup, click a mark on the graduated slider to jump to that strength. Use the arrow keys for 1% steps or hold Option while dragging to bypass snapping.
 
 <details>
 <summary>See colour and strength examples</summary>

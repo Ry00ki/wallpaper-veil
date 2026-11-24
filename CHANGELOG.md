@@ -5,7 +5,7 @@ Changes are grouped by release. Stable releases and previews are listed separate
 ## Unreleased
 
 - Put wallpaper tint, colour and strength first. Group paired-display sync controls under **Display brightness**.
-- Allow tint strength from 0% to 100%, with 10% presets in the menu and sliders in Settings and Quick Setup.
+- Allow tint strength from 0% to 100%, with clickable marks every 10% and extra stops at 95%, 97% and 99% on the sliders in Settings and Quick Setup.
 - Open a native Settings window with Wallpaper, General, Brightness and App permissions tabs. Keep the tint switch, colours, display sync, hotkey switch and widget actions in the menu. Settings handles fine strength, shortcut recording, startup and permissions.
 - Show confirmed display brightness in a brief, nonactivating indicator when using a Wallpaper Veil brightness shortcut.
 - Keep the veil in place during display refreshes to avoid briefly exposing the untinted wallpaper.
