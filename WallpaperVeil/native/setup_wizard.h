@@ -2,6 +2,7 @@
 #define WV_SETUP_WIZARD_H
 #import <AppKit/AppKit.h>
 #import "strength_slider.h"
+#import "support_link.h"
 #include <math.h>
 #include "lua.h"
 #include "lauxlib.h"
@@ -158,6 +159,7 @@ static WVSetupWizardController *WVSetupWizard;
         frame:NSMakeRect(34, 150, 450, 50) size:13 weight:NSFontWeightRegular];
     thanks.textColor = NSColor.secondaryLabelColor; [complete addSubview:thanks];
     [self button:@"Open GitHub Repository" frame:NSMakeRect(115, 106, 290, 32) action:@selector(openRepository:) page:complete];
+    [complete addSubview:WVSupportLinkButton(NSMakeRect(34, 26, 144, 20), self, @selector(openSupportPage:))];
     NSButton *done = [self button:@"Done" frame:NSMakeRect(376, 20, 110, 32) action:@selector(done:) page:complete];
     [primary addObject:done];
     self.window = window; self.pages = pages; self.statusLabels = statuses; self.primaryButtons = primary;
@@ -224,6 +226,10 @@ static WVSetupWizardController *WVSetupWizard;
     (void)sender;
     if (![NSWorkspace.sharedWorkspace openURL:[NSURL URLWithString:@"https://github.com/Ry00ki/wallpaper-veil"]])
         [self setError:@"The repository could not be opened in your default browser."];
+}
+- (void)openSupportPage:(id)sender {
+    (void)sender;
+    [self setError:WVOpenSupportPage() ? nil : @"The Ko-fi page could not be opened in your default browser."];
 }
 @end
 

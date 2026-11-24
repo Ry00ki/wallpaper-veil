@@ -12,6 +12,7 @@
 #import "settings_window.h"
 #import "setup_wizard.h"
 #import "brightness_indicator.h"
+#import "support_link.h"
 
 // App-owned UI only. Never alter NSWindowController or another application's UI.
 static NSString * const WVName = @"Wallpaper Veil";
@@ -68,6 +69,7 @@ static NSString *WVUpdateAcknowledgedNonce;
 - (void)fetchReleasePage:(NSUInteger)page generation:(NSUInteger)generation;
 - (void)showAbout:(id)sender;
 - (void)openRepository:(id)sender;
+- (void)openSupportPage:(id)sender;
 - (void)quit:(id)sender;
 @end
 static WVUIController *WVController;
@@ -129,6 +131,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     self.releaseButton.frame=NSMakeRect(35,52,230,30);self.releaseButton.bezelStyle=NSBezelStyleRounded;self.releaseButton.hidden=YES;[content addSubview:self.releaseButton];
     NSButton *repository=[NSButton buttonWithTitle:@"Open GitHub Repository" target:self action:@selector(openRepository:)];
     repository.frame=NSMakeRect(275,52,250,30);repository.bezelStyle=NSBezelStyleRounded;[content addSubview:repository];
+    [content addSubview:WVSupportLinkButton(NSMakeRect(208,92,144,20),self,@selector(openSupportPage:))];
     NSTextField *footer=WVLabel(@"Checks on opening. Download & Install restarts the app and keeps your settings.",NSMakeRect(15,14,530,20),10.5,NSFontWeightRegular);footer.textColor=NSColor.secondaryLabelColor;[content addSubview:footer];
     self.skipVersionButton=[NSButton buttonWithTitle:@"Skip This Version" target:self action:@selector(skipVersion:)];
     self.skipVersionButton.frame=NSMakeRect(370,367,175,30);self.skipVersionButton.bezelStyle=NSBezelStyleRounded;self.skipVersionButton.hidden=YES;[content addSubview:self.skipVersionButton];
@@ -387,6 +390,15 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
         [alert addButtonWithTitle:@"OK"];
         [alert runModal];
     }
+}
+- (void)openSupportPage:(id)sender {
+    (void)sender;
+    if (WVOpenSupportPage()) return;
+    NSAlert *alert = [[NSAlert alloc] init];
+    alert.messageText = WVName;
+    alert.informativeText = @"The Ko-fi page could not be opened in your default browser.";
+    [alert addButtonWithTitle:@"OK"];
+    [alert beginSheetModalForWindow:self.aboutWindow completionHandler:nil];
 }
 - (void)quit:(id)sender {
     (void)sender;

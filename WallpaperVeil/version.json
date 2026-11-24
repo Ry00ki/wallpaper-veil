@@ -1,6 +1,6 @@
 {
-  "version": "1.0.0",
-  "build": "10",
-  "release_tag": "v1.0.0",
+  "version": "1.1.0",
+  "build": "15",
+  "release_tag": "v1.1.0",
   "release_channel": "stable"
 }

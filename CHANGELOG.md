@@ -2,7 +2,7 @@
 
 Changes are grouped by release. Stable releases and previews are listed separately below.
 
-## Unreleased
+## 1.1.0 - 24.11.26
 
 - Put wallpaper tint, colour and strength first. Group paired-display sync controls under **Display brightness**.
 - Allow tint strength from 0% to 100%, with clickable marks every 10% and extra stops at 95%, 97% and 99% on the sliders in Settings and Quick Setup.
@@ -12,6 +12,7 @@ Changes are grouped by release. Stable releases and previews are listed separate
 - Offer a first-run **Quick Setup** with live preview, Apply and Cancel. Existing setups keep their preferences. Quick Setup can also open from General.
 - Add optional editable brightness shortcuts. The starting pair is Control–Option–Page Up/Down. The menu switch controls whether they act, and Brightness settings can record and clear each binding.
 - Use the existing About link to GitHub for credits and licence information. Individual licence files stay bundled with the app.
+- Add an optional **Buy me a coffee** link in About and on the final Quick Setup page.
 
 ## 1.0.0 - 31.10.26
 
