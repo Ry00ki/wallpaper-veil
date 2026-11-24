@@ -3,71 +3,66 @@
 [![Source checks](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml/badge.svg)](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/checks.yml)
 [![Latest stable release](https://img.shields.io/github/v/release/Ry00ki/wallpaper-veil)](https://github.com/Ry00ki/wallpaper-veil/releases/latest)
 
-Wallpaper Veil is a macOS menu-bar app that places a configurable colour tint above rotating photo wallpapers and below desktop icons. It also includes display-brightness sync and optional desktop-widget controls.
+**Keep the wallpaper you love and make your desktop icons easier to read.**
+
+Wallpaper Veil adds an adjustable tint behind your desktop icons. Your photos stay in rotation, and you control the tint from the macOS menu bar.
+
+**[Download for macOS](https://github.com/Ry00ki/wallpaper-veil/releases/latest)** · [Portfolio showcase](https://www.vincent-ry00ki.com/wallpaper-veil)
+
+Free and open source. Runs on macOS 13 or later on Apple silicon and Intel.
 
 <p align="center">
-  <img src="docs/images/wallpaper-veil-cover.jpg" alt="The same mountain photograph without a veil on the left and with a 50% black veil on the right, alongside the Wallpaper Veil app icon" width="840">
+  <img src="docs/images/wallpaper-veil-cover.jpg" alt="The same mountain photograph with its original brightness and with a 50% black veil, beside the Wallpaper Veil icon" width="840">
 </p>
 
-## Install and use
+## The same photograph, four ways
 
-Wallpaper Veil is distributed as **one self-contained `Wallpaper Veil.app`** for macOS 13 or later, on Apple Silicon and Intel Macs.
+Pick a tint colour and strength while keeping your wallpaper and desktop icons in view. Save custom colours and switch the veil on or off whenever you like.
 
-1. Download **`wallpaper-veil.zip`** from the [latest stable release](https://github.com/Ry00ki/wallpaper-veil/releases/latest). Preview builds use `wallpaper-veil-preview.zip` and are listed separately in [Releases](https://github.com/Ry00ki/wallpaper-veil/releases).
-2. Expand the ZIP and drag **`Wallpaper Veil.app` into Applications**. Your personal `~/Applications` folder is also supported. Keep one installed copy.
-3. Open the app and use **◐ Veil** in the menu bar.
+![A snowy mountain photograph with the veil off, a 20% black tint, a 50% black tint and a 30% warm tint](docs/images/colour-and-strength.png)
 
-That is the user installation. Python, Git, Xcode and a separate Hammerspoon installation are **not required to run the app**. Its native engine, Lua code and libraries travel inside the `.app`; writable app data lives in Application Support, with settings in its own macOS preferences domain. The release's checksum and JSON files are optional verification/provenance material, not extra items to install.
+## One adjustment. Two displays.
 
-Current builds are ad hoc signed and not notarized. The stable label describes the project release channel, not Apple signing or certification. macOS may block a downloaded app; see [Apple's documented Open Anyway process](https://support.apple.com/en-us/102445). Optional desktop-widget/clock automation requires macOS Accessibility approval; tint controls do not require that permission. Developer ID signing/notarization remains separate distribution work.
+Choose a source display and a follower. Adjust the source’s hardware brightness and the second display follows. The wallpaper tint has its own controls.
 
-[Report a bug](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=bug_report.yml) · [Portfolio overview](https://www.vincent-ry00ki.com/wallpaper-veil) · [Buy me a coffee](https://ko-fi.com/ry00ki)
+![Two illustrated displays at 50% hardware brightness. The paired display follows the primary display.](docs/images/brightness-sync.png)
 
-*The visuals below reuse the portfolio's photographs and simplified interface illustrations. They are not live application screenshots.*
+Optional keyboard shortcuts show Apple’s classic brightness indicator on the display being adjusted when the system service is available. Wallpaper Veil supplies its own indicator if that service is unavailable or reports an error. Brightness sync requires native macOS brightness control, which varies by monitor.
 
-## Features and current status
+## Set the tint in seconds
 
-### Keep your wallpaper, choose its strength
+Quick Setup previews colour and strength on your own wallpaper. Choose **Apply** to keep them or **Cancel** to restore the previous appearance. You can reopen Quick Setup from **App settings… → General**.
 
-Adjust tint colour and strength from 0% to 100%, save custom colours, and switch the veil on or off. The original photo stays in place and normal wallpaper rotation continues. The tint window stays in place during display refreshes, below desktop icons and windows. The slider in Settings and Quick Setup has clickable marks every 10% and extra stops at 95%, 97% and 99%. Use the arrow keys for 1% steps or hold Option while dragging to bypass snapping.
+Look for **◐ Veil** in the menu bar. The compact menu puts Wallpaper tint, Colour and Strength at the top. **App settings…** opens a separate window for fine-tuning the tint, managing startup, recording brightness shortcuts and reviewing optional permissions.
+
+<img src="docs/images/menu-bar.png" alt="The half-circle Veil label beside the macOS menu-bar clock" width="440">
+
+![Illustrated Wallpaper Veil menu beside its Settings window. The menu puts tint, colour and strength first. Settings shows the Wallpaper, General, Brightness and App permissions tabs.](docs/images/menu-and-settings.jpg)
+
+*The photographs and simplified interface illustrations come from the portfolio showcase.*
 
 <details>
-<summary>See colour and strength examples</summary>
+<summary>Controls, shortcuts and permissions</summary>
 
-![The same photograph with the veil off, a 20% black veil, a 50% black veil and a 30% warm custom-colour veil](docs/images/colour-and-strength.png)
+- Tint strength ranges from 0% to 100%. The slider has marks every 10% plus 95%, 97% and 99%. Use the arrow keys for 1% steps or hold Option while dragging to bypass snapping.
+- **Display brightness → Configure brightness shortcuts…** lets you record or clear the keyboard shortcuts. The default is Control–Option–Page Up or Page Down. Enable them from the Display brightness menu. They adjust the sync source or, with sync off, a supported active display. If your compact keyboard uses Fn for Page Up or Page Down, record the combination on that keyboard.
+- **Desktop widgets → Use macOS defaults** turns off the app’s widget and clock automation, clears the three automation choices and returns widget visibility to the macOS default. Select a clock or Notification Center option, **Show now** or **Hide now** to use custom behaviour again.
+- Showing widgets when you click the clock or open Notification Center requires Accessibility. Tint and brightness controls work without Accessibility or Input Monitoring. macOS may require approval in Login Items to launch the app at login.
+- Brightness sync was tested on an Apple silicon Mac with two Apple displays. See [clock and Notification Center testing](https://github.com/Ry00ki/wallpaper-veil/issues/3) and [display and desktop lifecycle testing](https://github.com/Ry00ki/wallpaper-veil/issues/4) for ongoing compatibility work.
 
 </details>
 
-### One adjustment, two displays
+## Ready for your Mac
 
-Choose a source display and a follower for hardware-brightness sync. When the source brightness changes, the paired display follows. This is separate from the wallpaper tint and strength controls.
+1. Download **`wallpaper-veil.zip`** from the [latest stable release](https://github.com/Ry00ki/wallpaper-veil/releases/latest).
+2. Unzip it and move **Wallpaper Veil.app** into Applications or your personal `~/Applications` folder. Keep one installed copy.
+3. Open the app and select **◐ Veil** in the menu bar.
 
-![Two illustrated displays showing matching sun icons and 50% brightness: adjust the primary display and the paired display follows automatically](docs/images/brightness-sync.png)
+The app bundles its engine and libraries. Run it directly from Applications. The checksum and JSON files on the release page are optional verification material. Early-access builds are available as **`wallpaper-veil-preview.zip`** in [Releases](https://github.com/Ry00ki/wallpaper-veil/releases).
 
-Brightness sync requires native macOS brightness control. Compatibility varies with third-party monitors.
+Current builds are ad hoc signed. For first-launch approval, see [Apple’s Open Anyway instructions](https://support.apple.com/en-us/102445). [Developer ID signing and notarization](https://github.com/Ry00ki/wallpaper-veil/issues/7) are tracked on GitHub.
 
-### Quietly in the menu bar
-
-Look for **◐ Veil** in the menu bar. The tint is on by default. **○ Veil** indicates the tint is off. The menu starts with Wallpaper tint, Colour and Strength. **Strength → Fine-tune strength…** opens the slider in Wallpaper settings. **App settings…** also includes General, Brightness and App permissions.
-
-On first use, **Quick Setup** previews colour and strength on your existing wallpaper. Choose **Apply** to keep it or **Cancel** to restore the previous appearance. You can reopen Quick Setup from General.
-
-**Display brightness** contains the sync and hotkey switches and the source and follower display choices. Choose **Configure brightness shortcuts…** to set or clear Up and Down. The starting pair is Control–Option–Page Up and Control–Option–Page Down. Shortcuts are off by default. They step the hardware brightness of the sync source or, with sync off, a supported active display. Wallpaper Veil tries Apple’s classic brightness indicator first, using the level reported by the adjusted display. It draws its own indicator if the system service is unavailable or reports an error. If your compact keyboard uses Fn for Page Up/Down, record the combination from that keyboard so the app uses the key macOS receives.
-
-| Settings tab | Controls and macOS requirements |
-| --- | --- |
-| Wallpaper | Fine-tune strength in 1% steps or refresh the tint. |
-| General | Quick Setup, launch at login and startup update checks. macOS may require approval in Login Items for startup. |
-| Brightness | Record and clear the increase and decrease shortcuts. |
-| App permissions | The optional Desktop Control access used by two widget automations, and the link to Login Items. Wallpaper tint, brightness and shortcuts work without Accessibility or Input Monitoring. |
-
-**Desktop widgets → Use macOS defaults** stops Wallpaper Veil's widget and clock automation, resets its widget-visibility preference to the macOS built-in default and clears the three automation choices. Select a clock or Notification Center option, **Show now**, or **Hide now** to use custom behaviour again. Desktop Control access lets Wallpaper Veil detect clock clicks and reveal widgets while keeping Notification Center open.
-
-![Illustration of the Wallpaper Veil menu-bar item beside the battery and clock](docs/images/menu-bar.png)
-
-About links to the GitHub repository for project information and credits. Licence files are bundled with the app. The optional **Buy me a coffee** link in About and on the final Quick Setup page opens the creator's Ko-fi page.
-
-The tested hardware setup uses an Apple silicon Mac and two Apple displays with native brightness control. The app targets macOS 13 or later and includes Apple silicon and Intel executables. Optional clock and Notification Center automation, plus sleep, Spaces and physical display reconnection, remain open in [#3](https://github.com/Ry00ki/wallpaper-veil/issues/3) and [#4](https://github.com/Ry00ki/wallpaper-veil/issues/4). Wallpaper Veil confirms hardware brightness changes by reading the level back from the display.
+[Report a bug](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=bug_report.yml) · [Buy me a coffee](https://ko-fi.com/ry00ki)
 
 ## Updating
 
