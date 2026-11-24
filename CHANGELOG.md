@@ -2,6 +2,14 @@
 
 Changes are grouped by release. Stable releases and previews are listed separately below.
 
+## Unreleased
+
+- Put wallpaper tint, colour and strength first. Group paired-display sync controls under **Display brightness**.
+- Open a native Settings window with General, Wallpaper, Brightness and Miscellaneous tabs. Explain desktop-control access beside the optional widget automation that uses it.
+- Offer a first-run **Quick Setup** with live preview, Apply and Cancel. Existing setups keep their preferences. Quick Setup can also open from General.
+- Add optional editable brightness shortcuts. The starting pair is Control–Option–Page Up/Down. The menu switch controls whether they act, and Brightness settings can record and clear each binding.
+- Use the existing About link to GitHub for credits and licence information. Individual licence files stay bundled with the app.
+
 ## 1.0.0 - 31.10.26
 
 - Check GitHub once per actual startup and when About opens; display independent stable and preview release choices.

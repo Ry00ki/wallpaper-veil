@@ -5,6 +5,13 @@ local M = { interval = 0.5, tolerance = 0.02, writeTimeout = 2.0,
 local PREFIX = "wallpaperVeil.brightnessSync."
 local suspensionReasons = {}
 
+local function stopHotkeyConfirmation()
+    if M.hotkeyConfirmation then
+        M.hotkeyConfirmation:stop()
+        M.hotkeyConfirmation = nil
+    end
+end
+
 local function valid(value)
     return type(value) == "number" and value == value and value >= 0 and value <= 1
 end
@@ -38,7 +45,7 @@ local function pair()
         if display.uuid == M.followerUUID then follower = display end
     end
     if not M.sourceUUID or not M.followerUUID then
-        return nil, nil, "Choose two displays in Brightness sync settings"
+        return nil, nil, "Choose a source and follower in Display brightness"
     end
     if M.sourceUUID == M.followerUUID then
         return nil, nil, "Choose different source and follower displays"
@@ -118,6 +125,7 @@ function M.suspend(reason)
     assert(type(reason) == "string" and reason ~= "", "A suspension reason is required")
     suspensionReasons[reason] = true
     M.suspended = true
+    stopHotkeyConfirmation()
     if M.timer then M.timer:stop(); M.timer = nil end
     M.pending = nil
     if M.enabled then M.message = "Paused: waiting for wake" end
@@ -218,23 +226,69 @@ function M.choose(which, uuid)
     M.message = "Pair updated; enable Synchronise display brightness to start"
 end
 
-function M.settingsMenu()
-    automaticPair()
-    local sourceItems, followerItems = {}, {}
+function M.settingsChoices()
+    local choices = {}
     for _, display in ipairs(displays()) do
-        local uuid = display.uuid
-        local label = display.name .. " [" .. uuid:sub(-8) .. "]"
-        if display.brightness == nil then
-            label = label .. " — brightness unavailable"
+        local enabled = display.brightness ~= nil
+        local title = display.name .. " [" .. display.uuid:sub(-8) .. "]"
+        if not enabled then title = title .. " — brightness unavailable" end
+        choices[#choices + 1] = {value = display.uuid, title = title, enabled = enabled}
+    end
+    return choices
+end
+
+function M.adjustBrightness(direction)
+    if direction ~= 1 and direction ~= -1 then return false, "Choose brightness up or down." end
+    if M.suspended then return false, "Display brightness is unavailable while asleep." end
+    local screen, current
+    if M.enabled and M.sourceUUID then
+        for _, display in ipairs(displays()) do
+            if display.uuid == M.sourceUUID then screen, current = display.screen, display.brightness; break end
         end
+        if current == nil then return false, "The brightness source display is unavailable." end
+    else
+        screen = hs.screen.mainScreen()
+        if screen then current = read(screen) end
+        if current == nil then
+            for _, display in ipairs(displays()) do
+                if display.brightness ~= nil then screen, current = display.screen, display.brightness; break end
+            end
+        end
+        if current == nil then return false, "No display supports hardware brightness control." end
+    end
+    local target = math.max(0, math.min(1, current + direction / 16))
+    if target == current then return true end
+    local ok, result = pcall(function() return screen:setBrightness(target) end)
+    if not ok or not result then return false, "The display did not accept the brightness change." end
+    stopHotkeyConfirmation()
+    local function changed()
+        local observed = read(screen)
+        return observed ~= nil and direction * (observed - current) > math.min(0.004, math.abs(target - current) / 2)
+    end
+    if not changed() then
+        local timer
+        timer = hs.timer.doAfter(0.45, function()
+            if M.hotkeyConfirmation ~= timer then return end
+            M.hotkeyConfirmation = nil
+            if not changed() then hs.alert.show("The display did not confirm the brightness change.") end
+        end)
+        M.hotkeyConfirmation = timer
+    end
+    return true
+end
+
+function M.settingsMenu()
+    local sourceItems, followerItems = {}, {}
+    for _, choice in ipairs(M.settingsChoices()) do
+        local uuid = choice.value
         sourceItems[#sourceItems + 1] = {
-            title = label, checked = uuid == M.sourceUUID,
-            disabled = display.brightness == nil,
+            title = choice.title, checked = uuid == M.sourceUUID,
+            disabled = not choice.enabled,
             fn = function() M.choose("source", uuid) end,
         }
         followerItems[#followerItems + 1] = {
-            title = label, checked = uuid == M.followerUUID,
-            disabled = display.brightness == nil,
+            title = choice.title, checked = uuid == M.followerUUID,
+            disabled = not choice.enabled,
             fn = function() M.choose("follower", uuid) end,
         }
     end
@@ -242,16 +296,16 @@ function M.settingsMenu()
         sourceItems[1] = { title = "No displays detected", disabled = true }
         followerItems[1] = { title = "No displays detected", disabled = true }
     end
-    local source, follower, reason = pair()
+    local _, _, reason = pair()
     local status = M.enabled and (M.message or reason or "On")
         or (reason or M.message or "Off")
     return {
+        { title = "Synchronise display brightness", checked = M.enabled == true,
+          fn = function() M.setEnabled(not M.enabled) end },
         { title = status, disabled = true },
+        { title = "-" },
         { title = "Source display (controls both)", menu = sourceItems },
         { title = "Follower display", menu = followerItems },
-        { title = "-" },
-        { title = "Changes to the source are copied to the follower", disabled = true },
-        { title = "Turn sync off to adjust the follower separately", disabled = true },
     }
 end
 
@@ -265,6 +319,7 @@ end
 
 function M.stop()
     if M.timer then M.timer:stop(); M.timer = nil end
+    stopHotkeyConfirmation()
     M.pending = nil
     M.suspended, suspensionReasons = false, {}
     M.enabled = false -- Deliberately do not overwrite the persisted preference.
@@ -275,7 +330,7 @@ function M.stop()
     M.veil, M.wrapper, M.originalMenu = nil, nil, nil
 end
 
-function M.start(veil)
+function M.start(veil, hotkeyMenuItem)
     assert(type(veil) == "table" and type(veil.menuItems) == "function" and veil.menu,
         "Wallpaper Veil must be running before brightness sync is loaded")
     if M.veil then M.stop() end
@@ -292,17 +347,16 @@ function M.start(veil)
         -- An outer app menu may retain this closure after stop/restart. Old
         -- generations pass through their captured menu without adding controls.
         if M.wrapper ~= wrapper or M.veil ~= veil then return items end
-        local insertAt = 2
+        local insertAt = #items + 1
         for index, item in ipairs(items) do
-            if item.title == "Wallpaper tint enabled" then insertAt = index + 1; break end
+            if item.title == "Desktop widgets" then insertAt = index; break end
         end
-        table.insert(items, insertAt, {
-            title = "Synchronise display brightness", checked = M.enabled == true,
-            fn = function() M.setEnabled(not M.enabled) end,
-        })
-        table.insert(items, insertAt + 1, {
-            title = "Brightness sync settings", menu = M.settingsMenu(),
-        })
+        local brightness = M.settingsMenu()
+        if hotkeyMenuItem then
+            brightness[#brightness + 1] = {title = "-"}
+            brightness[#brightness + 1] = hotkeyMenuItem()
+        end
+        table.insert(items, insertAt, {title = "Display brightness", menu = brightness})
         return items
     end
     M.wrapper = wrapper

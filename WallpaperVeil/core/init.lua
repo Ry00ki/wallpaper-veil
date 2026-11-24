@@ -6,6 +6,8 @@ local reportPath = support .. "/diagnostics.json"
 wallpaperVeilAppTimers = {}
 local appActive = true
 local brightnessLifecycleWatcher
+local nativeUI
+local hotkeys
 local function after(seconds, callback)
     local timer = hs.timer.doAfter(seconds, function()
         if appActive then callback() end
@@ -35,6 +37,9 @@ end
 local function cleanup()
     if not appActive then return end
     appActive = false
+    if nativeUI and nativeUI.closeSetupWizard then pcall(nativeUI.closeSetupWizard, true) end
+    if nativeUI and nativeUI.closeSettings then pcall(nativeUI.closeSettings) end
+    if hotkeys then pcall(hotkeys.stop) end
     for _, timer in ipairs(wallpaperVeilAppTimers) do pcall(function() timer:stop() end) end
     wallpaperVeilAppTimers = {}
     local acceptance = package.loaded["acceptance"]
@@ -58,12 +63,13 @@ local ok, failure = xpcall(function()
     assert(hs.settings.bundleID == bundleID, "Incorrect settings domain")
     local openUI = assert(package.loadlib(hs.processInfo.resourcePath ..
         "/../Frameworks/libWallpaperVeilUI.dylib", "luaopen_wallpaperveil_ui"))
-    local nativeUI = openUI()
+    nativeUI = openUI()
     assert(nativeUI.configure().configured, "App-owned native UI did not configure")
     assert(not package.path:find(".hammerspoon", 1, true), "External configuration search path")
     assert(not package.path:find("/.local/share/", 1, true), "External user module search path")
     for _, name in ipairs({"wallpaper_veil", "display_brightness_sync", "desktop_widgets",
-        "desktop_widget_clock", "desktop_widget_panel", "runtime_probe", "acceptance", "app_settings"}) do
+        "desktop_widget_clock", "desktop_widget_panel", "runtime_probe", "acceptance", "app_settings",
+        "quick_setup", "brightness_hotkeys"}) do
         assert(loadfile(code .. "/" .. name .. ".lua"))
     end
     for _, name in ipairs({"wallpaper_veil", "display_brightness_sync", "desktop_widgets",
@@ -74,12 +80,32 @@ local ok, failure = xpcall(function()
         after(0.2, quit)
         return
     end
+    local quickSetup = require("quick_setup")
+    local normalLaunch = os.getenv("WV_UI_TEST") ~= "1" and os.getenv("WV_SELF_TEST") ~= "1"
+    local offerSetup = false
+    if normalLaunch then
+        local previous = io.open(reportPath, "r")
+        if previous then previous:close() end
+        offerSetup = quickSetup.shouldOffer(hs.settings, previous ~= nil)
+    end
+    local deferredStartupCheck = false
+    local function checkOnStartup()
+        deferredStartupCheck = false
+        if appActive and nativeUI.checkOnStartup then nativeUI.checkOnStartup() end
+    end
+    local function startSetup()
+        return quickSetup.open(nativeUI, wallpaperVeil, function()
+            if deferredStartupCheck then checkOnStartup() end
+        end)
+    end
     wallpaperVeil = require("wallpaper_veil")
     wallpaperVeil.loginItemStatus = nativeUI.loginStatus
     wallpaperVeil.start({read=nativeUI.widgetPreferenceRead, write=nativeUI.widgetPreferenceWrite,
         reset=nativeUI.resetWidgetDefaults})
     displayBrightnessSync = require("display_brightness_sync")
-    displayBrightnessSync.start(wallpaperVeil)
+    hotkeys = require("brightness_hotkeys")
+    displayBrightnessSync.start(wallpaperVeil, hotkeys.menuItem)
+    hotkeys.start(displayBrightnessSync.adjustBrightness)
     local lifecycleSync = displayBrightnessSync
     brightnessLifecycleWatcher = hs.caffeinate.watcher.new(function(event)
         if not appActive or displayBrightnessSync ~= lifecycleSync then return end
@@ -94,9 +120,10 @@ local ok, failure = xpcall(function()
     local baseMenu = wallpaperVeil.menuItems
     wallpaperVeil.menuItems = function(...)
         local items = baseMenu(...)
+        items[#items+1] = {title="App settings…", fn=function()
+            appSettings.open(nativeUI, wallpaperVeil, displayBrightnessSync, startSetup, hotkeys)
+        end}
         items[#items+1] = {title="-"}
-        local settings = appSettings.menuItems(nativeUI)
-        items[#items+1] = {title="App settings", menu=settings}
         items[#items+1] = {title="Quit Wallpaper Veil", fn=quit}
         items[#items+1] = {title="About Wallpaper Veil", fn=function()
             nativeUI.showAbout()
@@ -139,8 +166,14 @@ local ok, failure = xpcall(function()
         local success, err = pcall(diagnostic)
         if not success then writeReport({ok=false,error=tostring(err),process=process()}) end
     end)
-    if os.getenv("WV_UI_TEST") ~= "1" and os.getenv("WV_SELF_TEST") ~= "1" then
-        after(1, function() if nativeUI.checkOnStartup then nativeUI.checkOnStartup() end end)
+    if normalLaunch then
+        after(1, function()
+            if offerSetup then
+                deferredStartupCheck = true
+                if not startSetup() then return end
+            end
+            checkOnStartup()
+        end)
     end
     if os.getenv("WV_UI_TEST") == "1" then
         local function failUITest(problem, path, kind)
@@ -148,6 +181,7 @@ local ok, failure = xpcall(function()
             -- Always stop network work and close our window before retrying either.
             pcall(nativeUI.cancelUpdateCheck)
             pcall(nativeUI.closeAbout)
+            pcall(nativeUI.closeSettings)
             local read, result = pcall(nativeUI.diagnostics)
             if not read or type(result) ~= "table" then result = {} end
             result.ok = false
@@ -161,6 +195,11 @@ local ok, failure = xpcall(function()
         end
         after(1, function()
             local success, err = xpcall(function()
+                appSettings.open(nativeUI, wallpaperVeil, displayBrightnessSync, startSetup, hotkeys)
+                local settings = nativeUI.settingsDiagnostics()
+                nativeUI.closeSettings()
+                local settingsOK = settings.visible == true
+                    and table.concat(settings.sections, ",") == "wallpaper,general,brightness,misc"
                 nativeUI.showAbout()
                 after(0.5, function()
                     local captured, problem = xpcall(function()
@@ -169,14 +208,13 @@ local ok, failure = xpcall(function()
                         ui.previewSaved = saved
                         ui.ok = ui.configured and ui.nativeMainMenuReady and ui.aboutVisible and
                             ui.aboutTitle == "Wallpaper Veil" and not ui.engineWindowsVisible and
-                            ui.repositoryActionWired and ui.noticesActionWired and ui.aboutIconPresent and saved and
+                            ui.repositoryActionWired and ui.aboutIconPresent and saved and settingsOK and
                             ui.updateActionWired and ui.releaseActionWired and
                             ui.currentVersion ~= "" and ui.currentBuild ~= "" and ui.currentReleaseTag ~= ""
                         ui.captureError = why
-                        ui.appSettings = {}
-                        for _, item in ipairs(appSettings.menuItems(nativeUI)) do
-                            ui.appSettings[#ui.appSettings+1] = {title=item.title, checked=item.checked,
-                                disabled=item.disabled, hasAction=type(item.fn)=="function"}
+                        ui.settingsWindow = settings
+                        for _, title in ipairs(ui.aboutButtons or {}) do
+                            if title == "Third-Party Notices" then ui.ok = false end
                         end
                         local function release(tag)
                             return {tag_name=tag, draft=false, prerelease=tag:find("-preview.", 1, true) ~= nil,

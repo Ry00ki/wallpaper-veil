@@ -48,14 +48,25 @@ Brightness sync requires native macOS brightness control. Third-party monitor su
 
 ### Quietly in the menu bar
 
-Look for **◐ Veil** in the menu bar; **○ Veil** indicates that the wallpaper tint is off. Open the menu for tint settings, display sync, optional desktop-widget and clock/Notification Center controls, and App settings. Quit and About Wallpaper Veil are available there too.
+Look for **◐ Veil** in the menu bar. The tint is on by default. **○ Veil** indicates the tint is off. The menu starts with wallpaper tint, colour and strength. **App settings…** opens directly to Wallpaper; General, Brightness and Miscellaneous are alongside it. These changes are in the current source.
+
+On first use, **Quick Setup** previews colour and strength on your existing wallpaper. Choose **Apply** to keep it or **Cancel** to restore the previous appearance. You can reopen Quick Setup from General.
+
+**Display brightness** groups optional sync and **Enable brightness hotkeys**. Under App settings → Brightness, set or clear Up and Down separately. The starting pair is Control–Option–Page Up and Control–Option–Page Down; shortcuts are off by default. They step the hardware brightness of the sync source or, with sync off, a supported active display. If your compact keyboard uses Fn for Page Up/Down, record the combination from that keyboard so the app uses the key macOS receives.
+
+| Settings tab | Controls and macOS requirements |
+| --- | --- |
+| Wallpaper | Switch the tint on or off, choose a colour and strength, or refresh the tint. No Accessibility approval is required. |
+| General | Quick Setup, launch at login and startup update checks. macOS may require approval in Login Items for startup. |
+| Brightness | Synchronise supported displays and record optional brightness shortcuts. Neither Accessibility nor Input Monitoring approval is required. |
+| Miscellaneous | Optional desktop-widget controls. Desktop Control access applies to clock-triggered reveal and to safely revealing widgets while preserving an open Notification Center. Manual show/hide and **Use macOS defaults** do not require that access. |
 
 **Desktop widgets → Use macOS defaults** stops Wallpaper Veil's widget/clock automation and resets its widget-visibility preference to the macOS built-in default. It clears the three automation choices. Select a clock/Notification Center option, or Show now/Hide now, to opt back into custom behaviour; compatible automation choices can be combined.
 
 ![Illustration of the Wallpaper Veil menu-bar item beside the battery and clock](docs/images/menu-bar.png)
 
 <details>
-<summary>See the simplified app menu</summary>
+<summary>See an illustration of the earlier app menu</summary>
 
 ![Simplified Wallpaper Veil menu with tint, brightness sync, colour, strength, desktop widgets, app settings, Quit and About controls](docs/images/menu-controls.png)
 

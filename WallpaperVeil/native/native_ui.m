@@ -9,6 +9,8 @@
 #import "update_download.h"
 #import "update_package.h"
 #import "update_notifications.h"
+#import "settings_window.h"
+#import "setup_wizard.h"
 
 // App-owned UI only. Never alter NSWindowController or another application's UI.
 static NSString * const WVName = @"Wallpaper Veil";
@@ -65,7 +67,6 @@ static NSString *WVUpdateAcknowledgedNonce;
 - (void)fetchReleasePage:(NSUInteger)page generation:(NSUInteger)generation;
 - (void)showAbout:(id)sender;
 - (void)openRepository:(id)sender;
-- (void)openNotices:(id)sender;
 - (void)quit:(id)sender;
 @end
 static WVUIController *WVController;
@@ -109,7 +110,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     version.textColor=NSColor.secondaryLabelColor;[content addSubview:version];
     NSTextField *channel=WVLabel([NSString stringWithFormat:@"%@ · %@",[info[@"WVReleaseChannel"] capitalizedString]?:@"Unknown",info[@"WVReleaseTag"]?:@""],NSMakeRect(20,456,520,20),12,NSFontWeightRegular);
     channel.textColor=NSColor.secondaryLabelColor;[content addSubview:channel];
-    NSTextField *detail=WVLabel(@"Standalone macOS app · MIT licence\nOpen-source credits and additional notices are included.",NSMakeRect(20,408,520,40),12,NSFontWeightRegular);
+    NSTextField *detail=WVLabel(@"Standalone macOS app · MIT licence",NSMakeRect(20,408,520,40),12,NSFontWeightRegular);
     detail.maximumNumberOfLines=2;detail.textColor=NSColor.secondaryLabelColor;[content addSubview:detail];
     self.updateButton=[NSButton buttonWithTitle:@"Check Again" target:self action:@selector(checkForUpdates:)];
     self.updateButton.frame=NSMakeRect(195,367,170,30);self.updateButton.bezelStyle=NSBezelStyleRounded;[content addSubview:self.updateButton];
@@ -124,10 +125,9 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     self.previewButton=[NSButton buttonWithTitle:@"Checking preview…" target:self action:@selector(installRelease:)];
     self.previewButton.tag=1;self.previewButton.frame=NSMakeRect(115,145,330,30);self.previewButton.bezelStyle=NSBezelStyleRounded;self.previewButton.enabled=NO;[content addSubview:self.previewButton];
     self.releaseButton=[NSButton buttonWithTitle:@"View Release on GitHub" target:self action:@selector(openRelease:)];
-    self.releaseButton.frame=NSMakeRect(35,92,230,30);self.releaseButton.bezelStyle=NSBezelStyleRounded;self.releaseButton.hidden=YES;[content addSubview:self.releaseButton];
+    self.releaseButton.frame=NSMakeRect(35,52,230,30);self.releaseButton.bezelStyle=NSBezelStyleRounded;self.releaseButton.hidden=YES;[content addSubview:self.releaseButton];
     NSButton *repository=[NSButton buttonWithTitle:@"Open GitHub Repository" target:self action:@selector(openRepository:)];
-    repository.frame=NSMakeRect(275,92,250,30);repository.bezelStyle=NSBezelStyleRounded;[content addSubview:repository];
-    NSButton *notices=[NSButton buttonWithTitle:@"Third-Party Notices" target:self action:@selector(openNotices:)];notices.frame=NSMakeRect(170,48,220,30);notices.bezelStyle=NSBezelStyleRounded;[content addSubview:notices];
+    repository.frame=NSMakeRect(275,52,250,30);repository.bezelStyle=NSBezelStyleRounded;[content addSubview:repository];
     NSTextField *footer=WVLabel(@"Checks on opening. Download & Install restarts the app and keeps your settings.",NSMakeRect(15,14,530,20),10.5,NSFontWeightRegular);footer.textColor=NSColor.secondaryLabelColor;[content addSubview:footer];
     self.skipVersionButton=[NSButton buttonWithTitle:@"Skip This Version" target:self action:@selector(skipVersion:)];
     self.skipVersionButton.frame=NSMakeRect(370,367,175,30);self.skipVersionButton.bezelStyle=NSBezelStyleRounded;self.skipVersionButton.hidden=YES;[content addSubview:self.skipVersionButton];
@@ -172,6 +172,7 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
     if(!WVSaveStartupChecksEnabled(NSUserDefaults.standardUserDefaults,requested,&error))self.updateLabel.stringValue=error.localizedDescription?:@"Could not remember that choice. Please try again.";
     self.startupCheckButton.state=WVStartupChecksEnabled(NSUserDefaults.standardUserDefaults)?NSControlStateValueOn:NSControlStateValueOff;
     if(!requested&&self.checkingForStartup)[self cancelUpdateCheck];
+    [WVSettings queueRefresh];
 }
 - (void)skipVersion:(id)sender {
     (void)sender;NSDictionary *candidate=[self notificationCandidateIgnoringSkips:YES];NSString *tag=candidate[@"tag"];
@@ -386,21 +387,6 @@ static NSTextField *WVLabel(NSString *text, NSRect frame, CGFloat size, NSFontWe
         [alert runModal];
     }
 }
-- (void)openNotices:(id)sender {
-    (void)sender;
-    NSString *directory = [NSBundle.mainBundle.resourcePath stringByAppendingPathComponent:@"Acknowledgements"];
-    NSString *readme = [directory stringByAppendingPathComponent:@"THIRD_PARTY_NOTICES.md"];
-    BOOL exists = [NSFileManager.defaultManager fileExistsAtPath:readme];
-    NSString *target = exists ? readme : directory;
-    BOOL opened = [NSWorkspace.sharedWorkspace openURL:[NSURL fileURLWithPath:target]];
-    if (!opened) {
-        NSAlert *alert = [[NSAlert alloc] init];
-        alert.messageText = WVName;
-        alert.informativeText = @"The bundled Third-Party Notices could not be opened.";
-        [alert addButtonWithTitle:@"OK"];
-        [alert runModal];
-    }
-}
 - (void)quit:(id)sender {
     (void)sender;
     [NSApp terminate:nil];
@@ -605,7 +591,7 @@ static int WVDiagnostics(lua_State *L) {
         }
         NSMutableArray<NSString *> *aboutText = [NSMutableArray array];
         NSMutableArray<NSString *> *aboutButtons = [NSMutableArray array];
-        BOOL repositoryWired = NO, noticesWired = NO, updateWired = NO, releaseWired = NO, iconPresent = NO;
+        BOOL repositoryWired = NO, updateWired = NO, releaseWired = NO, iconPresent = NO;
         for (NSView *view in WVController.aboutWindow.contentView.subviews) {
             if ([view isKindOfClass:NSTextField.class]) {
                 [aboutText addObject:((NSTextField *)view).stringValue ?: @""];
@@ -614,8 +600,6 @@ static int WVDiagnostics(lua_State *L) {
                 [aboutButtons addObject:button.title ?: @""];
                 if ([button.title isEqualToString:@"Open GitHub Repository"])
                     repositoryWired = button.target == WVController && button.action == @selector(openRepository:);
-                if ([button.title isEqualToString:@"Third-Party Notices"])
-                    noticesWired = button.target == WVController && button.action == @selector(openNotices:);
                 if (button == WVController.updateButton)
                     updateWired = button.target == WVController && button.action == @selector(checkForUpdates:);
                 if (button == WVController.releaseButton)
@@ -631,7 +615,7 @@ static int WVDiagnostics(lua_State *L) {
             @"aboutVisible": @(WVController.aboutWindow.visible),
             @"aboutTitle": WVController.aboutWindow.title ?: @"", @"menuItems": menuItems,
             @"aboutText": aboutText, @"aboutButtons": aboutButtons, @"repositoryURL": WVRepository,
-            @"repositoryActionWired": @(repositoryWired), @"noticesActionWired": @(noticesWired),
+            @"repositoryActionWired": @(repositoryWired),
             @"aboutIconPresent": @(iconPresent), @"updateActionWired": @(updateWired),
             @"releaseActionWired": @(releaseWired),
             @"stableInstallAvailable": @([WVController.catalog[@"stable"][@"canInstall"] boolValue]),
@@ -658,7 +642,7 @@ static int WVDiagnostics(lua_State *L) {
     lua_newtable(L);
     for (NSString *key in @[@"configured", @"preferencesSuppressed", @"consoleSuppressed",
         @"engineWindowsVisible", @"nativeMainMenuReady", @"aboutWindowCreated", @"aboutVisible",
-        @"repositoryActionWired", @"noticesActionWired", @"aboutIconPresent",
+        @"repositoryActionWired", @"aboutIconPresent",
         @"updateActionWired", @"releaseActionWired", @"updateInProgress", @"updateDeadlineActive", @"stableInstallAvailable", @"previewInstallAvailable", @"automaticCheckOnOpen", @"startupCheckInitiated", @"startupChecksEnabled"])
         WVSetBoolean(L, key.UTF8String, [values[key] boolValue]);
     WVSetString(L, "aboutTitle", values[@"aboutTitle"]);
@@ -686,6 +670,27 @@ static int WVShowAbout(lua_State *L) {
         [WVController showAbout:nil];
     });
     lua_pushboolean(L, YES); return 1;
+}
+static int WVStartupChecksPreference(lua_State *L) {
+    __block BOOL enabled = NO;
+    WVOnMain(^{ enabled = WVStartupChecksEnabled(NSUserDefaults.standardUserDefaults); });
+    lua_pushboolean(L, enabled); return 1;
+}
+static int WVSetStartupChecksPreference(lua_State *L) {
+    luaL_checktype(L, 1, LUA_TBOOLEAN);
+    BOOL requested = lua_toboolean(L, 1);
+    __block BOOL saved = NO; __block NSError *error = nil;
+    WVOnMain(^{
+        saved = WVSaveStartupChecksEnabled(NSUserDefaults.standardUserDefaults, requested, &error);
+        WVController.startupCheckButton.state = WVStartupChecksEnabled(NSUserDefaults.standardUserDefaults)
+            ? NSControlStateValueOn : NSControlStateValueOff;
+        if (saved && !requested && WVController.checkingForStartup) [WVController cancelUpdateCheck];
+        [WVSettings queueRefresh];
+    });
+    lua_pushboolean(L, saved);
+    if (!saved) lua_pushstring(L, (error.localizedDescription ?: @"The startup update preference could not be saved.").UTF8String);
+    else lua_pushnil(L);
+    return 2;
 }
 static int WVCheckForUpdates(lua_State *L) {
     WVOnMain(^{
@@ -844,6 +849,9 @@ __attribute__((visibility("default"))) int luaopen_wallpaperveil_ui(lua_State *L
     static const luaL_Reg functions[] = {
         {"configure", WVConfigure}, {"showAbout", WVShowAbout},
         {"diagnostics", WVDiagnostics}, {"closeAbout", WVCloseAbout},
+        {"showSettings", WVShowSettings}, {"closeSettings", WVCloseSettings}, {"settingsDiagnostics", WVSettingsDiagnostics},
+        {"showSetupWizard", WVShowSetupWizard}, {"closeSetupWizard", WVCloseSetupWizard}, {"setupWizardDiagnostics", WVSetupWizardDiagnostics},
+        {"startupChecksEnabled", WVStartupChecksPreference}, {"setStartupChecksEnabled", WVSetStartupChecksPreference},
         {"checkForUpdates", WVCheckForUpdates}, {"cancelUpdateCheck", WVCancelUpdateCheck},
         {"testUpdateResponse", WVTestUpdateResponse},
         {"checkOnStartup", WVCheckOnStartup}, {"testStartupCheckOnce", WVTestStartupCheckOnce},

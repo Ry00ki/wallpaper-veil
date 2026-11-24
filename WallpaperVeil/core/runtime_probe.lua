@@ -250,27 +250,48 @@ function Probe.collect(options)
         if veil.enabled and next(unmatched) then report.checks.canvasFramesMatchScreens = false end
     end
 
-    -- settingsMenu() can auto-select and persist a pair if both UUIDs are nil.
-    -- Refuse that path. Do not invoke any fn callbacks. Menu rendering may warm
-    -- an in-memory image cache but does not change settings in the checked path.
-    if veil and type(veil.menuItems) == 'function' and (not sync or sync.sourceUUID or sync.followerUUID) then
+    -- Rendering may warm an in-memory image cache. Never invoke menu actions.
+    if veil and type(veil.menuItems) == 'function' then
         report.menu = attempt(function() return menuTree(veil.menuItems()) end)
     else
         report.menu = {ok = false, skipped = true,
-            reason = 'Menu unavailable or unselected pair could cause an automatic preference write'}
+            reason = 'Menu unavailable'}
     end
+    report.checks.requiredMenuItemsPresentOnce = report.menu.ok == true
     if report.menu.ok then
         report.menuRequiredItemCounts = {}
-        for _, title in ipairs({'Wallpaper tint enabled', 'Synchronise display brightness',
-            'Brightness sync settings', 'Strength', 'Desktop widgets', 'Refresh displays'}) do
-            local count = 0
-            for _, item in ipairs(report.menu.value) do if item.title == title then count = count + 1 end end
-            report.menuRequiredItemCounts[title] = count
+        local items = report.menu.value
+        local function count(nodes, title)
+            local total = 0
+            for _, item in ipairs(nodes) do if item.title == title then total = total + 1 end end
+            return total
         end
-        report.checks.requiredMenuItemsPresentOnce = true
+        for _, title in ipairs({'Wallpaper tint', 'Display brightness',
+            'Desktop widgets', 'App settings…', 'Quit Wallpaper Veil', 'About Wallpaper Veil'}) do
+            report.menuRequiredItemCounts[title] = count(items, title)
+        end
         for _, count in pairs(report.menuRequiredItemCounts) do
             if count ~= 1 then report.checks.requiredMenuItemsPresentOnce = false end
         end
+        local brightness, settings
+        for _, item in ipairs(items) do
+            if item.title == 'Display brightness' then brightness = item end
+            if item.title == 'App settings…' then settings = item end
+        end
+        local tint, colour, strength, separator, displayMenu = table.unpack(items, 1, 5)
+        local children = brightness and brightness.children or {}
+        report.checks.wallpaperFirstMenu = tint ~= nil and tint.title == 'Wallpaper tint'
+            and colour ~= nil and colour.title:match('^Colour: ') ~= nil
+            and strength ~= nil and strength.title:match('^Strength: %d+%%$') ~= nil
+            and separator ~= nil and separator.title == '-'
+            and brightness ~= nil and displayMenu == brightness
+            and count(children, 'Synchronise display brightness') == 1
+            and count(children, 'Source display (controls both)') == 1
+            and count(children, 'Follower display') == 1
+            and count(children, 'Enable brightness hotkeys') == 1
+            and count(items, 'Synchronise display brightness') == 0
+            and count(items, 'Brightness sync settings') == 0
+            and settings ~= nil and settings.hasAction and settings.children == nil
     end
     report.checks.scopedSettingsUnchangedDuringProbe = same(before, scopedSettings())
     report.limitations = {

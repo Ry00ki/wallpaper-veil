@@ -97,8 +97,9 @@ local function environment(options)
             math.floor(value.green * 255 + 0.5), math.floor(value.blue * 255 + 0.5))
     end
     function veil.menuItems()
-        return {{title = "Wallpaper tint enabled"}, {title = "Quit Wallpaper Veil"},
-            {title = "About Wallpaper Veil"}}
+        return {{title = "Wallpaper tint"}, {title = "Colour: Black"},
+            {title = "Strength: 60%"}, {title = "-"}, {title = "Desktop widgets"},
+            {title = "Quit Wallpaper Veil"}, {title = "About Wallpaper Veil"}}
     end
     veil.setEnabled(true)
     env.veil = veil

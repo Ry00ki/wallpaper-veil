@@ -6,7 +6,7 @@ For normal use, follow the three-step [app installation](../README.md#install-an
 
 Wallpaper Veil is based on the qualified Hammerspoon 1.1.1 engine, with stable and preview product channels. Contributions, bug reports and feature requests are welcome. The product builder compiles Wallpaper Veil's launcher, native UI bridge and native updater, and accepts either the pinned official engine or a verified engine compiled from the audited source baseline. The manual source-engine build and product packaging retain separate provenance.
 
-The app has a small Objective-C launcher, an app-owned Cocoa UI module and a nested native runtime app. The UI module provides the About window, repository/notices buttons and native app menu, and keeps inherited engine preferences/console windows outside normal product use. The launcher uses NSWorkspace to start that runtime with controlled app-code and state paths, then exits. It is not a permanent background supervisor.
+The app has a small Objective-C launcher, an app-owned Cocoa UI module and a nested native runtime app. The UI module provides the Settings and About windows, the GitHub repository link and the native app menu. It keeps inherited engine preferences and console windows outside normal product use. The launcher uses NSWorkspace to start that runtime with controlled app-code and state paths, then exits. It is not a permanent background supervisor.
 
 Executable code and native modules live inside the completed app bundle. Writable state lives in `~/Library/Application Support/Wallpaper Veil`, with an independent macOS preferences domain. Once built, the app does not need the source checkout, Python or a separately installed Hammerspoon to run.
 
@@ -75,7 +75,11 @@ Before normal launch, stop an existing Hammerspoon-based veil to avoid duplicate
 open "$HOME/Applications/Wallpaper Veil.app"
 ```
 
-Use its menu-bar item to adjust the tint or quit. App settings includes Launch at login, Login Items settings and the Accessibility permission entry for optional automation. Enabling a pending login registration requires approval in System Settings; registering it is separate from qualifying a real later login. About Wallpaper Veil is the final menu item and opens an app-owned window with an Open GitHub Repository button pointing to this repository, plus access to bundled licence notices. macOS Accessibility approval is needed for the optional widget/clock automation; tint controls do not require that approval.
+Use the menu-bar item to adjust tint, colour or strength. **Display brightness** groups the hardware sync toggle, status and display choices. **App settings…** opens the native window. General holds launch at login and startup update checks, Wallpaper holds the tint controls, Brightness holds the paired-display controls, and Miscellaneous holds optional desktop-widget controls. Opening Settings reads current state. A user action is required before the app opens a system permission page or changes a setting.
+
+Wallpaper tint and hardware brightness sync do not require Accessibility. The shortcut recorder handles input only in its own focused sheet. Saved shortcuts use macOS hotkey registration without Accessibility or Input Monitoring approval. Grant Desktop Control access only if using the optional clock click automation or a widget reveal that needs to preserve an open Notification Center. Manual widget Show/Hide and resetting to macOS defaults use the app's scoped preference bridge. Launch at login has its own Login Items approval state.
+
+About Wallpaper Veil is the final menu item and includes **Open GitHub Repository**. The repository links to credits and licences. The individual notices remain bundled under the runtime's `Contents/Resources/Acknowledgements`.
 
 The current `handoff.py` is a local development helper with fixed default development and installation paths. Inspect its constants and recovery behavior before using it on another setup. Its handoff/self-test modes may stop a matching legacy process and make small temporary hardware-brightness changes. They are active acceptance tests, not passive diagnostics. The installed `--self-test` also temporarily exercises Use macOS defaults against the fixed `com.apple.WindowManager/StandardHideWidgets` key, with widget observers stopped. It restores the original key presence/type/value and all five owned widget settings, then verifies recovery; it stores no OS preference snapshot in the result. This does not qualify physical clock or Notification Center interaction. Prefer a verified previous Wallpaper Veil bundle for recovery. Restoring an older Hammerspoon setup requires that app to be present and validated first; do not assume it remains installed. A single successful run does not establish reliability across displays or macOS versions.
 
@@ -96,7 +100,7 @@ A source ZIP without Git history is not a build checkout. Normal users need only
 
 ## Native updater qualification
 
-[Update architecture and trust](updating.md) describes the release-channel rules and native transaction. `--ui-test` checks About, automatic checking, offline fixtures and the live public feed, without installing an update. It no longer opens the unchanged OS permission page as part of every UI run.
+[Update architecture and trust](updating.md) describes the release-channel rules and native transaction. `--ui-test` checks the four Settings sections, About, automatic checking, offline fixtures and the live public feed, without installing an update or opening an OS permission page.
 
 Maintainers can use `--update-test stable` or `--update-test preview` from the installed outer launcher to exercise the actual UI download/install path for a newer published version. This is an **active app replacement and restart**, not passive diagnostics. Retain the previous verified ZIP, confirm the intended public target, and inspect the private transaction/health receipts plus resulting installed source identity. End users choose Download & Install in About; no command is required.
 

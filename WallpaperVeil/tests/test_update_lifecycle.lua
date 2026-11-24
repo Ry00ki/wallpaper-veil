@@ -8,14 +8,14 @@ local block=source:sub(first,last-1)
 local count=0
 local function scenario(mode)
   local now, sequence, closed, cancelled, captures, writeAttempts = 0,0,0,0,0,0
-  local queue, reports, live = {}, {}, false
+  local queue, reports, live, settingsVisible = {}, {}, false, false
   local function after(delay, fn)
     sequence=sequence+1; queue[#queue+1]={at=now+delay,fn=fn,seq=sequence}
   end
   local function diagnostic()
     if live and mode=='diagnostics' then error('diagnostic fixture failure') end
     return {configured=true,nativeMainMenuReady=true,aboutVisible=closed==0,aboutTitle='Wallpaper Veil',
-      engineWindowsVisible=false,repositoryActionWired=true,noticesActionWired=true,aboutIconPresent=true,
+      engineWindowsVisible=false,repositoryActionWired=true,aboutIconPresent=true,
       updateActionWired=true,releaseActionWired=true,currentVersion='0.1.4',currentBuild='5',
       currentReleaseTag='v0.1.4-preview.1',releaseChannel='preview',
       updateState=live and ((mode=='deadline' and cancelled==0) and 'checking' or (cancelled>0 and 'cancelled' or 'ahead')) or 'idle',
@@ -24,6 +24,8 @@ local function scenario(mode)
   local autoChecks, installs=0,0
   local native={testStartupCheckOnce=function()return true end,testInstallUpdate=function(channel)assert(channel=="stable");installs=installs+1;return true end,testAutomaticAboutCheck=function()autoChecks=autoChecks+1;return true end,openAccessibilitySettings=function() return true end,showAbout=function() end,closeAbout=function() closed=closed+1 end,
     diagnostics=diagnostic,cancelUpdateCheck=function() cancelled=cancelled+1 end,
+    settingsDiagnostics=function() return {visible=settingsVisible, sections={'wallpaper','general','brightness','misc'}} end,
+    closeSettings=function() settingsVisible=false end,
     checkForUpdates=function() live=true end,
     saveAboutPreview=function()
       captures=captures+1
@@ -38,7 +40,7 @@ local function scenario(mode)
       return {updateState=tag=='v0.1.4-preview.1' and 'current' or 'available',latestTag=tag,
         latestURL='https://github.com/Ry00ki/wallpaper-veil/releases/tag/'..tag}
     end}
-  local env=setmetatable({appSettings={menuItems=function() return {} end},nativeUI=native,support='/mock',after=after,
+  local env=setmetatable({appSettings={open=function() settingsVisible=true end},nativeUI=native,support='/mock',after=after,
     os={getenv=function(key)if key=='WV_UPDATE_TEST_CHANNEL' then return mode=='install' and 'stable' or '' end;return '1' end,date=os.date},
     hs={timer={secondsSinceEpoch=function() return now end},json={encode=function(x) return x end},printf=function() end},
     writeReport=function(value,target)
@@ -56,6 +58,8 @@ local function scenario(mode)
     assert(steps<1000,'unbounded deferred callbacks')
   end
   assert(reports['/mock/ui-check.json'].ok,'fixture qualification failed in '..mode)
+  assert(not settingsVisible and reports['/mock/ui-check.json'].settingsWindow.visible,
+    'Settings did not open or was left open after qualification')
   local result=assert(reports['/mock/update-check.json'],'missing terminal receipt in '..mode)
   if mode=='install' then assert(closed==0 and installs==1 and result.updateInstallationRequested,'Active update was cancelled by qualification cleanup')
   else assert(closed>0,'About left open in '..mode)end
