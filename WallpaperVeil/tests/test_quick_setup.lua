@@ -2,7 +2,7 @@ local root = arg[1] or "WallpaperVeil/core"
 local setup = assert(loadfile(root .. "/quick_setup.lua"))()
 local veil = assert(loadfile(root .. "/wallpaper_veil.lua"))()
 local prefs, writes, reject = {}, 0, nil
-local screen = {fullFrame = function() return {x=0, y=0, w=600, h=400} end}
+local screen = {id = function() return 101 end, fullFrame = function() return {x=0, y=0, w=600, h=400} end}
 hs = {
     settings = {
         get = function(key) return prefs[key] end,
@@ -15,11 +15,19 @@ hs = {
         clear = function(key) prefs[key] = nil end,
     },
     screen = {allScreens = function() return {screen} end},
-    canvas = {new = function()
-        local canvas = {}
-        for _, name in ipairs({"behavior", "sendToBack", "mouseCallback", "clickActivating", "show", "delete"}) do
+    canvas = {new = function(frame)
+        local canvas = {rect = frame}
+        for _, name in ipairs({"behavior", "sendToBack", "mouseCallback", "clickActivating"}) do
             canvas[name] = function(self) return self end
         end
+        function canvas:frame(next)
+            if not next then return self.rect end
+            self.rect = next
+            return self
+        end
+        function canvas:isShowing() return self.showing == true end
+        function canvas:show() self.showing = true; return self end
+        function canvas:delete() self.showing = false end
         function canvas:elementAttribute(index, field, value) self[index][field] = value end
         function canvas:alpha(value) self.strength = value; return self end
         return canvas
@@ -71,8 +79,9 @@ assert(veil.enabled and veil.opacity == 1 and not veil.setupPreview and #veil.ca
 assert(veil.colorHex(prefs["wallpaperVeil.color"]) == "#FFFFFF")
 assert(prefs["wallpaperVeil.enabled"] == true and prefs["wallpaperVeil.opacity"] == 1)
 assert(perform("done") == nil and closes == 2 and #veil.canvases == 1)
+local appliedCanvas = veil.canvases[1]
 assert(veil.previewSetup("#000000", 20))
 assert(veil.cancelSetup())
-assert(#veil.canvases == 1 and veil.canvases[1].strength == 1)
+assert(#veil.canvases == 1 and veil.canvases[1] == appliedCanvas and appliedCanvas.strength == 1)
 assert(veil.colorHex(veil.canvases[1][1].fillColor) == "#FFFFFF")
 print("Quick Setup preview, cancel, first-run guard and save recovery passed")

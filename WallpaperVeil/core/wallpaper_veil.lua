@@ -1,6 +1,7 @@
 -- A configurable translucent colour layer between wallpaper and desktop items.
 -- Photos rotation continues underneath; this configuration never reads Photos.
 local M = {canvases = {}, running = false, generation = 0}
+local canvasesByDisplay = {}
 local prefix = "wallpaperVeil."
 local presets = {
     {name = "Black", color = {red = 0, green = 0, blue = 0, alpha = 1}},
@@ -86,6 +87,7 @@ end
 
 local function clearCanvases()
     for _, canvas in ipairs(M.canvases) do canvas:delete() end
+    canvasesByDisplay = {}
     M.canvases = {}
 end
 
@@ -98,25 +100,55 @@ local function updateMenu()
     end
 end
 
+local function reconcileCanvases(color, opacity)
+    local screens = hs.screen.allScreens()
+    -- WindowServer can briefly report no displays during reconfiguration.
+    if #screens == 0 then return end
+    local canvases, byDisplay, created = {}, {}, {}
+    local ok, failure = pcall(function()
+        for _, screen in ipairs(screens) do
+            local id, frame = screen:id(), screen:fullFrame()
+            local canvas = canvasesByDisplay[id]
+            if canvas then
+                local current = canvas:frame()
+                if current.x ~= frame.x or current.y ~= frame.y or current.w ~= frame.w or current.h ~= frame.h then
+                    canvas:frame(frame)
+                end
+                canvas:elementAttribute(1, "fillColor", color)
+                canvas:alpha(opacity)
+            else
+                canvas = assert(hs.canvas.new(frame), "Cannot create wallpaper veil")
+                created[#created + 1] = canvas
+                canvas[1] = {type = "rectangle", action = "fill", fillColor = color,
+                    frame = {x = 0, y = 0, w = "100%", h = "100%"}}
+                -- Keep the click-through veil above the wallpaper and below desktop icons.
+                canvas:behavior({"canJoinAllSpaces", "stationary", "ignoresCycle"})
+                canvas:sendToBack():mouseCallback(nil):clickActivating(false):alpha(opacity)
+            end
+            if not canvas:isShowing() then canvas:show() end
+            byDisplay[id] = canvas
+            canvases[#canvases + 1] = canvas
+        end
+    end)
+    if not ok then
+        for _, canvas in ipairs(created) do canvas:delete() end
+        error(failure, 0)
+    end
+    -- Retain each existing window and give new displays a veil before removing
+    -- obsolete windows so a refresh never exposes an unchanged display.
+    for id, canvas in pairs(canvasesByDisplay) do
+        if not byDisplay[id] then canvas:delete() end
+    end
+    canvasesByDisplay, M.canvases = byDisplay, canvases
+end
+
 function M.rebuild()
     if not M.running then return end
-    clearCanvases()
     local setup = M.setupPreview
     if M.enabled or setup then
-        for _, screen in ipairs(hs.screen.allScreens()) do
-            local canvas = assert(hs.canvas.new(screen:fullFrame()), "Cannot create wallpaper veil")
-            canvas[1] = {
-                type = "rectangle", action = "fill",
-                fillColor = setup and setup.color or M.previewColor or M.color,
-                frame = {x = 0, y = 0, w = "100%", h = "100%"},
-            }
-            -- sendToBack uses desktopIcon - 1, above wallpaper and below icons.
-            -- No mouse callbacks means the window ignores mouse events.
-            canvas:behavior({"canJoinAllSpaces", "stationary", "ignoresCycle"})
-            canvas:sendToBack():mouseCallback(nil):clickActivating(false)
-                :alpha(setup and setup.opacity or M.opacity):show()
-            table.insert(M.canvases, canvas)
-        end
+        reconcileCanvases(setup and setup.color or M.previewColor or M.color, setup and setup.opacity or M.opacity)
+    else
+        clearCanvases()
     end
     updateMenu()
 end

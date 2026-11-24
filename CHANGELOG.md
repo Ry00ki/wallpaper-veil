@@ -8,6 +8,7 @@ Changes are grouped by release. Stable releases and previews are listed separate
 - Allow tint strength from 0% to 100%, with 10% presets in the menu and sliders in Settings and Quick Setup.
 - Open a native Settings window with Wallpaper, General, Brightness and App permissions tabs. Keep the tint switch, colours, display sync, hotkey switch and widget actions in the menu. Settings handles fine strength, shortcut recording, startup and permissions.
 - Show confirmed display brightness in a brief, nonactivating indicator when using a Wallpaper Veil brightness shortcut.
+- Keep the veil in place during display refreshes to avoid briefly exposing the untinted wallpaper.
 - Offer a first-run **Quick Setup** with live preview, Apply and Cancel. Existing setups keep their preferences. Quick Setup can also open from General.
 - Add optional editable brightness shortcuts. The starting pair is Control–Option–Page Up/Down. The menu switch controls whether they act, and Brightness settings can record and clear each binding.
 - Use the existing About link to GitHub for credits and licence information. Individual licence files stay bundled with the app.
