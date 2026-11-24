@@ -21,7 +21,7 @@ That is the user installation. Python, Git, Xcode and a separate Hammerspoon ins
 
 Current builds are ad hoc signed and not notarized. The stable label describes the project release channel, not Apple signing or certification. macOS may block a downloaded app; see [Apple's documented Open Anyway process](https://support.apple.com/en-us/102445). Optional desktop-widget/clock automation requires macOS Accessibility approval; tint controls do not require that permission. Developer ID signing/notarization remains separate distribution work.
 
-[Report a bug](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=bug_report.yml) · [Portfolio overview](https://www.vincent-ry00ki.com/wallpaper-veil)
+[Report a bug](https://github.com/Ry00ki/wallpaper-veil/issues/new?template=bug_report.yml) · [Portfolio overview](https://www.vincent-ry00ki.com/wallpaper-veil) · [Buy me a coffee](https://ko-fi.com/ry00ki)
 
 *The visuals below reuse the portfolio's photographs and simplified interface illustrations. They are not live application screenshots.*
 
