@@ -2,6 +2,10 @@
 
 Changes are grouped by release. Stable releases and previews are listed separately below.
 
+## Unreleased
+
+- Try Apple’s classic brightness indicator first for brightness shortcuts. Use Wallpaper Veil’s indicator when the system service reports a delivery failure or is unavailable.
+
 ## 1.1.0 - 24.11.26
 
 - Put wallpaper tint, colour and strength first. Group paired-display sync controls under **Display brightness**.

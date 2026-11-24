@@ -6,9 +6,10 @@
 #include <stdint.h>
 #include "lua.h"
 #include "lauxlib.h"
+#import "system_brightness_indicator.h"
 
-// This is Wallpaper Veil's own visual feedback. It only displays an already
-// confirmed hardware value; it never changes brightness or generates input.
+// Visual feedback shares the already confirmed hardware value. The Apple
+// service is tried first, and Wallpaper Veil draws a panel on failure.
 @interface WVBrightnessPanel : NSPanel
 @end
 @implementation WVBrightnessPanel
@@ -21,12 +22,30 @@
 @property(nonatomic, strong) NSTextField *percentage;
 @property(nonatomic, strong) NSProgressIndicator *progress;
 @property(nonatomic, strong) NSTimer *dismissTimer;
+@property(nonatomic, strong) id<WVSystemBrightnessRendering> systemIndicator;
+@property(nonatomic) NSUInteger requestGeneration;
+- (instancetype)initWithSystemIndicator:(id<WVSystemBrightnessRendering>)indicator;
 - (void)showLevel:(double)level onScreen:(NSScreen *)screen;
 - (void)close;
 @end
 static WVBrightnessIndicatorController *WVBrightnessIndicator;
 
+static NSScreen *WVBrightnessScreenForDisplay(uint32_t displayID) {
+    for (NSScreen *screen in NSScreen.screens) {
+        if ([screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue] == displayID) return screen;
+    }
+    return nil;
+}
+
 @implementation WVBrightnessIndicatorController
+- (instancetype)init {
+    return [self initWithSystemIndicator:[[WVSystemBrightnessIndicator alloc] init]];
+}
+- (instancetype)initWithSystemIndicator:(id<WVSystemBrightnessRendering>)indicator {
+    self = [super init];
+    if (self) _systemIndicator = indicator;
+    return self;
+}
 - (void)makePanel {
     if (self.panel) return;
     NSRect bounds = NSMakeRect(0, 0, 244, 62);
@@ -69,7 +88,7 @@ static WVBrightnessIndicatorController *WVBrightnessIndicator;
     [surface addSubview:progress]; self.progress = progress;
     self.panel = panel;
 }
-- (void)showLevel:(double)level onScreen:(NSScreen *)screen {
+- (void)showFallbackLevel:(double)level onScreen:(NSScreen *)screen {
     [self makePanel];
     [self.dismissTimer invalidate]; self.dismissTimer = nil;
     self.percentage.stringValue = [NSString stringWithFormat:@"%ld%%", (long)lround(level * 100)];
@@ -88,9 +107,29 @@ static WVBrightnessIndicatorController *WVBrightnessIndicator;
     }];
     [NSRunLoop.mainRunLoop addTimer:self.dismissTimer forMode:NSRunLoopCommonModes];
 }
-- (void)close {
+- (void)hideFallback {
     [self.dismissTimer invalidate]; self.dismissTimer = nil;
-    [self.panel orderOut:nil]; [self.panel close];
+    [self.panel orderOut:nil];
+}
+- (void)showLevel:(double)level onScreen:(NSScreen *)screen {
+    uint32_t displayID = [screen.deviceDescription[@"NSScreenNumber"] unsignedIntValue];
+    NSUInteger request = ++self.requestGeneration;
+    __weak WVBrightnessIndicatorController *owner = self;
+    BOOL sent = [self.systemIndicator showLevel:level onDisplay:displayID onFailure:^{
+        WVBrightnessIndicatorController *current = owner;
+        if (current.requestGeneration != request) return;
+        current.requestGeneration++;
+        // A display may disappear while the async request is in flight.
+        NSScreen *target = WVBrightnessScreenForDisplay(displayID);
+        if (target) [current showFallbackLevel:level onScreen:target];
+    }];
+    if (sent) [self hideFallback];
+    else [self showFallbackLevel:level onScreen:screen];
+}
+- (void)close {
+    self.requestGeneration++;
+    [self.systemIndicator close];
+    [self hideFallback]; [self.panel close];
     self.panel = nil; self.percentage = nil; self.progress = nil;
 }
 @end
@@ -107,14 +146,8 @@ static int WVShowBrightnessIndicator(lua_State *state) {
     luaL_argcheck(state, !selectedDisplay || (displayID > 0 && (unsigned long long)displayID <= UINT32_MAX),
         2, "display ID must be a positive 32-bit display identifier");
     if (!NSThread.isMainThread) return luaL_error(state, "Brightness feedback must run on the application thread");
-    NSScreen *screen = selectedDisplay ? nil : (NSScreen.mainScreen ?: NSScreen.screens.firstObject);
-    if (selectedDisplay) {
-        for (NSScreen *candidate in NSScreen.screens) {
-            if ([candidate.deviceDescription[@"NSScreenNumber"] unsignedIntValue] == (uint32_t)displayID) {
-                screen = candidate; break;
-            }
-        }
-    }
+    NSScreen *screen = selectedDisplay ? WVBrightnessScreenForDisplay((uint32_t)displayID)
+        : (NSScreen.mainScreen ?: NSScreen.screens.firstObject);
     if (!screen) {
         lua_pushboolean(state, NO); lua_pushstring(state, "The display for brightness feedback is unavailable."); return 2;
     }
