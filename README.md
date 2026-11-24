@@ -52,7 +52,7 @@ Look for **◐ Veil** in the menu bar. The tint is on by default. **○ Veil** i
 
 On first use, **Quick Setup** previews colour and strength on your existing wallpaper. Choose **Apply** to keep it or **Cancel** to restore the previous appearance. You can reopen Quick Setup from General.
 
-**Display brightness** contains the sync and hotkey switches and the source and follower display choices. Choose **Configure brightness shortcuts…** to set or clear Up and Down. The starting pair is Control–Option–Page Up and Control–Option–Page Down. Shortcuts are off by default. They step the hardware brightness of the sync source or, with sync off, a supported active display. Wallpaper Veil briefly shows the brightness reported by that display after an adjustment. If your compact keyboard uses Fn for Page Up/Down, record the combination from that keyboard so the app uses the key macOS receives.
+**Display brightness** contains the sync and hotkey switches and the source and follower display choices. Choose **Configure brightness shortcuts…** to set or clear Up and Down. The starting pair is Control–Option–Page Up and Control–Option–Page Down. Shortcuts are off by default. They step the hardware brightness of the sync source or, with sync off, a supported active display. Wallpaper Veil tries Apple’s classic brightness indicator first, using the level reported by the adjusted display. It draws its own indicator if the system service is unavailable or reports an error. If your compact keyboard uses Fn for Page Up/Down, record the combination from that keyboard so the app uses the key macOS receives.
 
 | Settings tab | Controls and macOS requirements |
 | --- | --- |

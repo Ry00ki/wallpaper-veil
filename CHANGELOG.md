@@ -2,6 +2,11 @@
 
 Changes are grouped by release. Stable releases and previews are listed separately below.
 
+## 1.1.1 - 24.11.26
+
+- Show Apple’s classic brightness indicator when using brightness shortcuts. Wallpaper Veil displays its own indicator if Apple’s service is unavailable or reports a delivery failure.
+- Fix a startup error when macOS reports a different path to the same app bundle, such as through a symbolic link.
+
 ## 1.1.0 - 24.11.26
 
 - Put wallpaper tint, colour and strength first. Group paired-display sync controls under **Display brightness**.
