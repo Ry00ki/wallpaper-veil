@@ -81,6 +81,8 @@ The current `handoff.py` is a local development helper with fixed default develo
 
 ## Repository checks and preview builds
 
+For the remaining real-hardware work in [#4](https://github.com/Ry00ki/wallpaper-veil/issues/4), use the separate, optional [lifecycle qualification helper and runbook](lifecycle-qualification.md). It captures passive checkpoints around actions performed by the operator and records observations without assigning automatic hardware acceptance. It does not launch the app or invoke `--verify-only`, `--self-test`, `handoff.py` or the updater. No app rebuild is needed. Startup `diagnostics.json` is historical, not a live post-wake status feed.
+
 Source checks parse the app Lua, compile Python and run deterministic regression suites on every push and pull request. The [Wallpaper Veil preview build](https://github.com/Ry00ki/wallpaper-veil/actions/workflows/preview-build.yml) workflow builds a ZIP only when manually dispatched. Its public preview artifact includes a SHA-256 checksum and verifies the extracted app signature; the workflow does not launch the app or exercise hardware. The artifact is an ad hoc signed, unnotarized preview, not a stable release. See [CI details](../WallpaperVeil/ci/README.md).
 
 
