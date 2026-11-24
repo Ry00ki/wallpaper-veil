@@ -6,7 +6,8 @@ These are the same photographs and feature illustrations used on the [Wallpaper 
 - `colour-and-strength.png`: the published four-panel colour/transparency guide: veil off, black at 20%, black at 50%, and a warm custom colour at 30%.
 - `brightness-sync.png`: the published two-display guide, with matching sun icons and illustrative 50% values. Hardware-brightness sync is separate from the wallpaper veil and requires native macOS brightness control; third-party monitor support is not guaranteed.
 - `menu-bar.png`: the published menu-bar illustration, including the enabled/disabled Veil labels.
-- `menu-controls.png`: a published illustration of the earlier menu, before brightness controls were grouped and App settings opened a separate window.
+- `menu-and-settings.jpg` shows the current wallpaper-first menu and dedicated Settings window. It was captured from the rendered portfolio showcase on 24 November 2026.
+- `menu-controls.png` is the archived illustration of the earlier menu.
 
 The four PNGs are tight browser renders of the existing public page’s HTML/CSS/SVG sections, captured on 31 October 2026. The cover is the existing portfolio JPEG. These are explanatory illustrations, not live application screenshots or measured hardware results. They contain no personal desktop capture, preferences or diagnostic data.
 
