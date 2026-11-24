@@ -2,10 +2,10 @@
 
 Changes are grouped by release. Stable releases and previews are listed separately below.
 
-## Unreleased
+## 1.1.1 - 24.11.26
 
-- Accept equivalent paths to the bundled runtime during startup, including paths macOS resolves through a symbolic link.
-- Try Apple’s classic brightness indicator first for brightness shortcuts. Use Wallpaper Veil’s indicator when the system service reports a delivery failure or is unavailable.
+- Show Apple’s classic brightness indicator when using brightness shortcuts. Wallpaper Veil displays its own indicator if Apple’s service is unavailable or reports a delivery failure.
+- Fix a startup error when macOS reports a different path to the same app bundle, such as through a symbolic link.
 
 ## 1.1.0 - 24.11.26
 
