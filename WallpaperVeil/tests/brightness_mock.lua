@@ -26,9 +26,10 @@ local function environment(options)
         end
         error("Fixture event loop exceeded its bound")
     end
-    local function screen(uuid, value, behavior)
+    local function screen(id, uuid, value, behavior)
         behavior = behavior or {}
         local object = {uuid = uuid, value = value, writes = {}, behavior = behavior}
+        function object:id() return id end
         function object:getUUID() return self.uuid end
         function object:name() return "Studio Display" end
         function object:getBrightness()
@@ -49,8 +50,8 @@ local function environment(options)
         end
         return object
     end
-    env.source = screen("source", options.sourceValue or 0.5, options.source)
-    env.follower = screen("follower", options.followerValue or 0.5, options.follower)
+    env.source = screen(101, "source", options.sourceValue or 0.5, options.source)
+    env.follower = screen(102, "follower", options.followerValue or 0.5, options.follower)
     env.screens = {env.source, env.follower}
     env.settings["wallpaperVeil.brightnessSync.sourceUUID"] = "source"
     env.settings["wallpaperVeil.brightnessSync.followerUUID"] = "follower"
@@ -97,8 +98,9 @@ local function environment(options)
             math.floor(value.green * 255 + 0.5), math.floor(value.blue * 255 + 0.5))
     end
     function veil.menuItems()
-        return {{title = "Wallpaper tint enabled"}, {title = "Quit Wallpaper Veil"},
-            {title = "About Wallpaper Veil"}}
+        return {{title = "Wallpaper tint"}, {title = "Colour: Black"},
+            {title = "Strength: 60%"}, {title = "-"}, {title = "Desktop widgets"},
+            {title = "Quit Wallpaper Veil"}, {title = "About Wallpaper Veil"}}
     end
     veil.setEnabled(true)
     env.veil = veil

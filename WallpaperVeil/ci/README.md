@@ -158,10 +158,10 @@ real installed checks. Quit the running app before an explicit UI qualification:
 open -n "$HOME/Applications/Wallpaper Veil.app" --args --ui-test
 ```
 
-This mode opens About, checks native current/newer/error fixtures, then invokes
-the same discovery action against public GitHub, including an automatic-About-check fixture. It writes `ui-check.json` and
-`update-check.json` under Application Support. Normal startup performs no update
-check. The UI test's diagnostics use the signed version metadata.
+This mode opens Settings and verifies its four sections without changing their values.
+It then checks About, including current/newer/error fixtures, and runs release
+discovery against public GitHub. It writes `ui-check.json` and `update-check.json`
+under Application Support. The diagnostics use the signed version metadata.
 
 Before publication, verify a clean committed build, regression/feature results,
 restoration, signatures and package provenance. After publication, anonymously

@@ -5,10 +5,18 @@ local report = {}
 local function check(name, expected, actual, detail)
   report[#report+1] = {name=name,expected=expected,actual=actual,passed=expected==actual,detail=detail}
 end
+local function display(id,x,w)
+  local screen={rect={x=x,y=0,w=w,h=800}}
+  function screen:id()return id end
+  function screen:fullFrame()return self.rect end
+  return screen
+end
 local function fresh()
   for _,name in ipairs({'wallpaper_veil','desktop_widgets','desktop_widget_clock','desktop_widget_panel','display_brightness_sync','runtime_probe','acceptance'}) do package.loaded[name]=nil end
   _G.wallpaperVeil, _G.displayBrightnessSync = nil, nil
   local w={now=0,ax=false,timers={},tasks={},taps={},menus={},screenWatchers={},wakeWatchers={},canvases={},prefs={},promptCount=0}
+  w.screens={display(101,0,1000)}
+  w.canvasEvents={}
   local function timer(callback, running)
     local t={callback=callback,running=running}
     function t:stop() self.running=false;return self end
@@ -42,16 +50,31 @@ local function fresh()
       function t:finish(code,out,err)self.callback(code or 0,out or '',err or '')end
       w.tasks[#w.tasks+1]=t;return t
     end},
-    screen={allScreens=function()return {{fullFrame=function()return {x=0,y=0,w=1000,h=800}end}}end,
+    screen={allScreens=function()return w.screens end,
       watcher={new=function(cb)return watcher(w.screenWatchers,cb)end}},
     caffeinate={watcher={systemDidWake=1,screensDidWake=2,systemWillSleep=3,screensDidSleep=4,
       new=function(cb)return watcher(w.wakeWatchers,cb)end}},
     canvas={windowLevels={desktopIcon=0},new=function(frame)
       if w.failCanvas then error('simulated canvas construction failure') end
-      local c={rect=frame,visible=false,deleted=false}
+      local c={rect=frame,visible=false,deleted=false,shows=0,frameChanges=0}
       for _,name in ipairs({'behavior','sendToBack','mouseCallback','clickActivating','alpha','elementAttribute','level'})do c[name]=function(self,...)return self end end
-      function c:show()self.visible=true;return self end
-      function c:delete()self.deleted=true;self.visible=false end
+      function c:frame(next)
+        if not next then return self.rect end
+        self.rect=next
+        self.frameChanges=self.frameChanges+1
+        return self
+      end
+      function c:isShowing()return self.visible end
+      function c:show()
+        if w.failShowX==self.rect.x then error('simulated canvas show failure') end
+        self.visible,self.shows=true,self.shows+1
+        w.canvasEvents[#w.canvasEvents+1]={action='show',canvas=self}
+        return self
+      end
+      function c:delete()
+        self.deleted,self.visible=true,false
+        w.canvasEvents[#w.canvasEvents+1]={action='delete',canvas=self}
+      end
       w.canvases[#w.canvases+1]=c;return c
     end},
     menubar={new=function()
@@ -80,10 +103,75 @@ do
   m.stop()
 end
 do
+  local w=fresh();local m=veil(w);m.start()
+  local original=m.canvases[1]
+  local refresh=w.timers[1]
+  w.screenWatchers[1].callback()
+  check('Screen notification still schedules veil reconciliation',true,refresh.running)
+  refresh.callback()
+  check('Unchanged screen topology retains the actual overlay',original,m.canvases[1])
+  check('Unchanged screen topology never orders the veil off or redraws its frame',true,
+    #w.canvases==1 and not original.deleted and original.visible and original.shows==1 and original.frameChanges==0)
+  local detectedScreens=w.screens
+  w.screens={}
+  refresh.callback()
+  w.screens=detectedScreens
+  refresh.callback()
+  check('An empty display snapshot during reconfiguration does not clear the veil',true,
+    #w.canvases==1 and m.canvases[1]==original and original.visible and original.shows==1)
+  original.visible=false
+  refresh.callback()
+  check('A hidden veil is shown again without allocating a second canvas',true,
+    #w.canvases==1 and m.canvases[1]==original and original.visible and original.shows==2)
+  m.stop()
+end
+do
+  local w=fresh();local m=veil(w)
+  w.screens={display(101,0,1000),display(102,1000,800)}
+  m.start()
+  local retained,removed=table.unpack(m.canvases)
+  w.screens={display(103,1200,900),display(101,0,1200)}
+  m.rebuild()
+  check('Display removal and addition preserve the surviving window across screen-list reorder',true,
+    #w.canvases==3 and #m.canvases==2 and m.canvases[2]==retained and m.canvases[1]==w.canvases[3])
+  check('A surviving display resizes its veil in place',true,
+    retained.visible and not retained.deleted and retained.frameChanges==1 and retained.rect.w==1200 and retained.shows==1)
+  check('The new display is covered before the obsolete canvas is deleted',true,
+    w.canvasEvents[3].action=='show' and w.canvasEvents[3].canvas==m.canvases[1]
+      and w.canvasEvents[4].action=='delete' and w.canvasEvents[4].canvas==removed)
+  m.setEnabled(false)
+  check('Turning tint off removes all live windows',true,#m.canvases==0 and retained.deleted and w.canvases[3].deleted)
+  m.stop()
+end
+do
+  local w=fresh();local m=veil(w);m.start()
+  local original=m.canvases[1]
+  w.screens={w.screens[1],display(102,1000,800),display(103,1800,900)}
+  w.failShowX=1800
+  local ok=pcall(m.rebuild)
+  check('A failed newly attached overlay is reported and leaves the existing tint in place',true,
+    not ok and #m.canvases==1 and m.canvases[1]==original and original.visible and not original.deleted)
+  check('Partially created display windows are cleaned up after the failure',true,
+    #w.canvases==3 and w.canvases[2].deleted and w.canvases[3].deleted)
+  w.failShowX=nil
+  m.rebuild()
+  check('Following refresh can add both displays and retain the original tint',true,
+    #m.canvases==3 and m.canvases[1]==original and original.shows==1)
+  m.stop()
+end
+do
   local w=fresh();local m=veil(w);m.start();local oldWatcher=w.screenWatchers[1];local refresh=w.timers[1];m.stop()
   oldWatcher.callback();check('Stale screen callback cannot restart refresh after stop',false,refresh.running)
   refresh.callback();local visible=0;for _,c in ipairs(w.canvases)do if c.visible then visible=visible+1 end end
   check('Stale refresh cannot recreate tint after stop',0,visible)
+end
+do
+  local w=fresh();local m=veil(w);m.start()
+  for _, value in ipairs({0, 0.99, 1}) do
+    m.setOpacity(value);m.stop();m.start()
+    check('Tint strength survives restart at ' .. tostring(value),value,m.opacity)
+  end
+  m.stop()
 end
 local function runInit(failBrightness)
   local w=fresh();local v=veil(w);package.loaded.wallpaper_veil=v

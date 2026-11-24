@@ -121,13 +121,94 @@ test("outer app menu remains usable through sync stop and restart", function()
     local function count()
         local found = 0
         for _, item in ipairs(e.veil.menuItems()) do
-            if item.title == "Synchronise display brightness" then found = found + 1 end
+            if item.title == "Display brightness" then
+                found = found + 1
+                assert(item.menu[1].title == "Synchronise display brightness")
+            end
         end
         return found
     end
     assert(count() == 0)
     e.sync.start(e.veil); assert(count() == 1)
     e.sync.stop(); assert(count() == 0)
+end)
+
+test("brightness controls share one submenu after the wallpaper controls", function()
+    local e = create{}.load(app)
+    local items = e.veil.menuItems()
+    assert(items[1].title == "Wallpaper tint" and items[2].title == "Colour: Black")
+    assert(items[3].title == "Strength: 60%" and items[4].title == "-")
+    assert(items[5].title == "Display brightness" and items[6].title == "Desktop widgets")
+    for _, item in ipairs(items) do
+        assert(item.title ~= "Synchronise display brightness" and item.title ~= "Brightness sync settings")
+    end
+    local toggle = items[5].menu[1]
+    assert(not toggle.checked and #e.follower.writes == 0)
+    toggle.fn()
+    local controls = e.veil.menuItems()[5].menu
+    assert(e.sync.enabled and controls[1].checked and controls[2].disabled)
+    assert(controls[4].title == "Source display (controls both)" and #controls[4].menu == 2)
+    assert(controls[5].title == "Follower display" and #controls[5].menu == 2)
+    controls[1].fn()
+    assert(not e.sync.enabled)
+end)
+
+test("reading unavailable display choices neither selects a pair nor touches preferences", function()
+    local e = create{}.load(app)
+    e.sync.sourceUUID, e.sync.followerUUID = nil, nil
+    e.settings["wallpaperVeil.brightnessSync.sourceUUID"] = nil
+    e.settings["wallpaperVeil.brightnessSync.followerUUID"] = nil
+    e.follower.unreadable = true
+    e.veil.menuItems()
+    local choices = e.sync.settingsChoices()
+    assert(#choices == 2 and not choices[1].enabled and choices[2].enabled)
+    assert(e.sync.sourceUUID == nil and e.sync.followerUUID == nil)
+    assert(next(e.settings) == nil and #e.follower.writes == 0)
+end)
+
+test("brightness shortcuts adjust the sync source or the active supported display", function()
+    local e = create{}.load(app)
+    hs.screen.mainScreen = function() return e.follower end
+    local events = {}
+    local function feedback(level, id) events[#events+1] = {level=level,id=id} end
+    assert(e.sync.adjustBrightness(1, feedback) and e.follower.value == 0.5 + 1 / 16)
+    assert(events[1].level == e.follower.value and events[1].id == e.follower:id())
+    e.sync.setEnabled(true, true)
+    assert(e.sync.adjustBrightness(-1, feedback) and e.source.value == 0.5 - 1 / 16)
+    assert(events[2].level == e.source.value and events[2].id == e.source:id())
+    e.advance(1)
+    assert(e.follower.value == e.source.value and #events == 2)
+    e.source.value = 1
+    assert(e.sync.adjustBrightness(1, feedback) and #e.source.writes == 1 and events[3].level == 1)
+    e.source.value = .01
+    assert(e.sync.adjustBrightness(-1, feedback) and #e.source.writes == 2 and events[4].level == 0)
+    e.sync.suspend("display")
+    assert(not e.sync.adjustBrightness(-1, feedback) and #events == 4)
+end)
+
+test("shortcut feedback waits for a delayed, quantised hardware read-back", function()
+    local e = create{follower={delay=.2,quantum=.05}}.load(app)
+    hs.screen.mainScreen = function() return e.follower end
+    local events = {}
+    assert(e.sync.adjustBrightness(1, function(level,id) events[#events+1] = {level=level,id=id} end))
+    e.advance(.3)
+    assert(#events == 0 and e.follower.value ~= e.follower.writes[1].value)
+    e.advance(.5)
+    assert(#events == 1 and events[1].level == e.follower.value and events[1].id == e.follower:id())
+end)
+
+test("a brightness shortcut checks for a silent hardware write failure", function()
+    local e = create{follower={ignore=function()return true end}}.load(app)
+    hs.screen.mainScreen = function() return e.follower end
+    local events = 0
+    local function feedback() events = events + 1 end
+    assert(e.sync.adjustBrightness(1, feedback) and #e.alerts == 0)
+    e.advance(0.5)
+    assert(#e.alerts == 1 and e.alerts[1]:find("confirm", 1, true))
+    assert(e.sync.adjustBrightness(1, feedback))
+    e.sync.suspend("display")
+    e.advance(1)
+    assert(#e.alerts == 1 and events == 0)
 end)
 
 print(string.format("Brightness sync: %d focused cases passed", cases))

@@ -1,6 +1,7 @@
 -- A configurable translucent colour layer between wallpaper and desktop items.
 -- Photos rotation continues underneath; this configuration never reads Photos.
 local M = {canvases = {}, running = false, generation = 0}
+local canvasesByDisplay = {}
 local prefix = "wallpaperVeil."
 local presets = {
     {name = "Black", color = {red = 0, green = 0, blue = 0, alpha = 1}},
@@ -69,8 +70,24 @@ function M.colorName()
     return "Custom " .. M.colorHex(M.color)
 end
 
+function M.settingsColors()
+    local choices, seen = {}, {}
+    local function add(name, color)
+        local hex = M.colorHex(color)
+        if not seen[hex] then
+            choices[#choices + 1] = {value = hex, title = name, enabled = true}
+            seen[hex] = true
+        end
+    end
+    for _, entry in ipairs(presets) do add(entry.name, entry.color) end
+    for _, entry in ipairs(M.savedColors) do add(entry.name, entry.color) end
+    add(M.colorName(), M.color)
+    return choices
+end
+
 local function clearCanvases()
     for _, canvas in ipairs(M.canvases) do canvas:delete() end
+    canvasesByDisplay = {}
     M.canvases = {}
 end
 
@@ -83,23 +100,55 @@ local function updateMenu()
     end
 end
 
+local function reconcileCanvases(color, opacity)
+    local screens = hs.screen.allScreens()
+    -- WindowServer can briefly report no displays during reconfiguration.
+    if #screens == 0 then return end
+    local canvases, byDisplay, created = {}, {}, {}
+    local ok, failure = pcall(function()
+        for _, screen in ipairs(screens) do
+            local id, frame = screen:id(), screen:fullFrame()
+            local canvas = canvasesByDisplay[id]
+            if canvas then
+                local current = canvas:frame()
+                if current.x ~= frame.x or current.y ~= frame.y or current.w ~= frame.w or current.h ~= frame.h then
+                    canvas:frame(frame)
+                end
+                canvas:elementAttribute(1, "fillColor", color)
+                canvas:alpha(opacity)
+            else
+                canvas = assert(hs.canvas.new(frame), "Cannot create wallpaper veil")
+                created[#created + 1] = canvas
+                canvas[1] = {type = "rectangle", action = "fill", fillColor = color,
+                    frame = {x = 0, y = 0, w = "100%", h = "100%"}}
+                -- Keep the click-through veil above the wallpaper and below desktop icons.
+                canvas:behavior({"canJoinAllSpaces", "stationary", "ignoresCycle"})
+                canvas:sendToBack():mouseCallback(nil):clickActivating(false):alpha(opacity)
+            end
+            if not canvas:isShowing() then canvas:show() end
+            byDisplay[id] = canvas
+            canvases[#canvases + 1] = canvas
+        end
+    end)
+    if not ok then
+        for _, canvas in ipairs(created) do canvas:delete() end
+        error(failure, 0)
+    end
+    -- Retain each existing window and give new displays a veil before removing
+    -- obsolete windows so a refresh never exposes an unchanged display.
+    for id, canvas in pairs(canvasesByDisplay) do
+        if not byDisplay[id] then canvas:delete() end
+    end
+    canvasesByDisplay, M.canvases = byDisplay, canvases
+end
+
 function M.rebuild()
     if not M.running then return end
-    clearCanvases()
-    if M.enabled then
-        for _, screen in ipairs(hs.screen.allScreens()) do
-            local canvas = assert(hs.canvas.new(screen:fullFrame()), "Cannot create wallpaper veil")
-            canvas[1] = {
-                type = "rectangle", action = "fill", fillColor = M.previewColor or M.color,
-                frame = {x = 0, y = 0, w = "100%", h = "100%"},
-            }
-            -- sendToBack uses desktopIcon - 1, above wallpaper and below icons.
-            -- No mouse callbacks means the window ignores mouse events.
-            canvas:behavior({"canJoinAllSpaces", "stationary", "ignoresCycle"})
-            canvas:sendToBack():mouseCallback(nil):clickActivating(false)
-                :alpha(M.opacity):show()
-            table.insert(M.canvases, canvas)
-        end
+    local setup = M.setupPreview
+    if M.enabled or setup then
+        reconcileCanvases(setup and setup.color or M.previewColor or M.color, setup and setup.opacity or M.opacity)
+    else
+        clearCanvases()
     end
     updateMenu()
 end
@@ -110,12 +159,15 @@ function M.setEnabled(enabled)
     M.rebuild()
 end
 
+local function validOpacity(value)
+    return type(value) == "number" and value >= 0 and value <= 1
+end
+
 function M.setOpacity(opacity)
-    assert(type(opacity) == "number" and opacity >= 0.10 and opacity <= 0.80,
-        "Wallpaper veil strength must be between 10% and 80%")
+    assert(validOpacity(opacity), "Wallpaper veil strength must be between 0% and 100%")
     M.opacity = opacity
     hs.settings.set(prefix .. "opacity", M.opacity)
-    for _, canvas in ipairs(M.canvases) do canvas:alpha(M.opacity) end
+    for _, canvas in ipairs(M.canvases) do canvas:alpha(M.setupPreview and M.setupPreview.opacity or M.opacity) end
     updateMenu()
 end
 
@@ -124,8 +176,69 @@ function M.setColor(color)
     if type(color) == "string" then color = M.parseColor(color) end
     M.color = assert(normalizeColor(color), "Invalid RGB colour")
     hs.settings.set(prefix .. "color", M.color)
-    for _, canvas in ipairs(M.canvases) do canvas:elementAttribute(1, "fillColor", M.color) end
+    local visible = M.setupPreview and M.setupPreview.color or M.color
+    for _, canvas in ipairs(M.canvases) do canvas:elementAttribute(1, "fillColor", visible) end
     updateMenu()
+end
+
+function M.previewSetup(color, percent)
+    if not M.running then return false, "Wallpaper Veil is no longer running." end
+    if M.picker then return false, "Close the custom colour picker to preview Quick Setup." end
+    local rgb = type(color) == "string" and M.parseColor(color)
+    if not rgb or type(percent) ~= "number" or percent % 1 ~= 0 or not validOpacity(percent / 100) then
+        return false, "Choose a colour and a strength between 0% and 100%."
+    end
+    local needsCanvases = not M.enabled and not M.setupPreview
+    M.setupPreview = {color = rgb, opacity = percent / 100}
+    if needsCanvases then
+        M.rebuild()
+    else
+        for _, canvas in ipairs(M.canvases) do
+            canvas:elementAttribute(1, "fillColor", rgb)
+            canvas:alpha(M.setupPreview.opacity)
+        end
+    end
+    return true
+end
+
+function M.cancelSetup()
+    if M.setupPreview then
+        local preview = M.setupPreview
+        M.setupPreview = nil
+        if not pcall(M.rebuild) then
+            M.setupPreview = preview
+            pcall(M.rebuild)
+            return false
+        end
+    end
+    return true
+end
+
+function M.applySetup(color, percent)
+    local ok, problem = M.previewSetup(color, percent)
+    if not ok then return false, problem end
+    local preview = M.setupPreview
+    local changes = {
+        {key = prefix .. "color", value = preview.color},
+        {key = prefix .. "opacity", value = preview.opacity},
+        {key = prefix .. "enabled", value = true},
+    }
+    for _, change in ipairs(changes) do change.previous = hs.settings.get(change.key) end
+    for index, change in ipairs(changes) do
+        local written, result = pcall(hs.settings.set, change.key, change.value)
+        if not written or result == false then
+            for i = index, 1, -1 do
+                local backup = changes[i]
+                if backup.previous == nil then pcall(hs.settings.clear, backup.key)
+                else pcall(hs.settings.set, backup.key, backup.previous) end
+            end
+            return false, "The tint could not be saved. Try Apply again."
+        end
+    end
+    M.color, M.opacity, M.enabled = preview.color, preview.opacity, true
+    M.setupPreview = nil
+    updateMenu()
+    return true
 end
 
 local function validName(name)
@@ -299,6 +412,7 @@ function M.savePickerColor()
 end
 
 function M.openPicker(editName)
+    if M.setupPreview then return false, "Finish Quick Setup before opening the colour picker." end
     if M.picker then
         M.picker.afterClose = function() M.openPicker(editName) end
         M.finishPicker(false)
@@ -459,21 +573,21 @@ function M.menuItems()
     table.insert(colors, {title = "RGB  " .. M.colorRGB(visibleColor), disabled = true})
     table.insert(colors, {title = "Advanced", menu = {{title = "Enter RGB or Hex…", fn = M.promptColor}}})
     local strengths = {}
-    for _, percent in ipairs({10, 20, 30, 40, 50, 60, 70, 80}) do
+    for percent = 0, 100, 10 do
         local opacity = percent / 100
         table.insert(strengths, {title = string.format("%d%%%s", percent, percent == 40 and " (default)" or ""),
             checked = math.abs(M.opacity - opacity) < 0.001, fn = function() M.setOpacity(opacity) end})
     end
+    if M.openSettings then
+        table.insert(strengths, {title = "-"})
+        table.insert(strengths, {title = "Fine-tune strength…", fn = function() M.openSettings("wallpaper") end})
+    end
     return {
-        {title = "Wallpaper Veil", disabled = true},
-        {title = "Wallpaper tint enabled", checked = M.enabled, fn = function() M.setEnabled(not M.enabled) end},
+        {title = "Wallpaper tint", checked = M.enabled, fn = function() M.setEnabled(not M.enabled) end},
         {title = "Colour: " .. M.colorName(), menu = colors},
-        {title = "Strength", menu = strengths},
+        {title = string.format("Strength: %d%%", math.floor(M.opacity * 100 + 0.5)), menu = strengths},
         {title = "-"},
         {title = "Desktop widgets", menu = M.widgets.menuItems()},
-        {title = "-"},
-        {title = "Refresh displays", fn = M.rebuild},
-        {title = "-"},
     }
 end
 
@@ -503,6 +617,7 @@ function M.status()
 end
 
 function M.stop()
+    M.setupPreview = nil
     M.running = false
     M.generation = M.generation + 1
     if M.widgets then M.widgets.stop() end
@@ -537,8 +652,7 @@ function M.start(widgetPreferences)
         M.widgets.start(widgetPreferences)
         M.enabled = hs.settings.get(prefix .. "enabled") ~= false
         local savedOpacity = hs.settings.get(prefix .. "opacity")
-        M.opacity = type(savedOpacity) == "number" and savedOpacity >= 0.10
-            and savedOpacity <= 0.80 and savedOpacity or 0.40
+        M.opacity = validOpacity(savedOpacity) and savedOpacity or 0.40
         M.color = normalizeColor(hs.settings.get(prefix .. "color")) or normalizeColor(presets[3].color)
         M.savedColors = readPalette(hs.settings.get(prefix .. "savedColors"))
         M.deletedColors = readPalette(hs.settings.get(prefix .. "deletedColors"))
