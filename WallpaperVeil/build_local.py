@@ -103,14 +103,20 @@ def bundled_setup(original: str) -> str:
 local modpath, frameworkspath, prettypath, fullpath, configdir, docstringspath, hasinitfile, autoload_extensions = ...
 local code = assert(os.getenv("WV_APP_CODE"), "Wallpaper Veil launcher is required")
 local support = assert(os.getenv("WV_APPLICATION_SUPPORT"), "Wallpaper Veil state path is missing")
-assert(code == hs.processInfo.resourcePath .. "/WallpaperVeil", "Unexpected application code path")
 assert(hs.processInfo.bundleID == "com.ry00ki.wallpaperveil", "Unexpected application identity")
+local bundledCode = hs.processInfo.resourcePath .. "/WallpaperVeil"
+package.cpath = frameworkspath .. "/?.dylib"
+if code ~= bundledCode then
+    -- Launch Services and the running bundle can report different spellings for one path.
+    local absolutePath = require("hs.libfs").pathToAbsolute
+    local bundledPath = absolutePath(bundledCode)
+    assert(bundledPath and absolutePath(code) == bundledPath, "Unexpected application code path")
+end
 configdir = support .. "/runtime"
 fullpath = code .. "/init.lua"
 prettypath = fullpath
 hasinitfile = true
 package.path = table.concat({code .. "/?.lua", code .. "/?/init.lua", modpath .. "/?.lua", modpath .. "/?/init.lua"}, ";")
-package.cpath = frameworkspath .. "/?.dylib"
 local preload = function(m) return function() return require(m) end end
 ''' + tail
 
